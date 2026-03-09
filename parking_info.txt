@@ -1,0 +1,26 @@
+PARKING FACILITY - GENERAL INFORMATION
+=======================================
+
+Location:
+We are located at 123 Main Street, Downtown District. Easy access from Highway 101. The entrance is on Oak Avenue, next to the City Mall.
+
+Parking details:
+We have 200 total parking spaces: 100 standard outdoor spaces and 100 premium covered spaces. Each space is clearly marked. Premium spaces are in the underground level (B1).
+
+Working hours:
+The facility is open 24/7. Entry and exit barriers operate at all times. The customer desk is staffed Monday to Friday 8:00–18:00, Saturday 9:00–14:00.
+
+Prices (see dynamic data for current rates):
+Standard parking: hourly and daily rates apply. Premium covered: higher rate. Weekly and monthly passes available at the desk.
+
+Availability:
+Current availability of spaces is managed in our system. Ask the chatbot to check free spaces for your preferred date before reserving.
+
+Booking process:
+To reserve a parking space you must be a registered user. Enter your nickname at the start of the chat. Then provide your preferred date or date range: single date as YYYY-MM-DD, or a range as YYYY-MM-DD - YYYY-MM-DD. The chatbot will check availability and save your reservation(s). You can ask "show my reservations" to see your active reservations.
+
+Payment:
+Payment is due on arrival. We accept credit cards, debit cards, and mobile payment apps. No cash.
+
+Contact:
+For support call +1-555-0100 or email parking@example.com (desk hours only).
