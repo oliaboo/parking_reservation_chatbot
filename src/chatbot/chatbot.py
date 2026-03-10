@@ -42,34 +42,38 @@ class ParkingChatbot:
             return state
         last_message = messages[-1]
         user_input = last_message.content if hasattr(last_message, "content") else str(last_message)
-        user_input_lower = user_input.lower()
-        show_keywords = [
-            "show my reservations",
-            "my reservations",
-            "active reservations",
-            "list my reservations",
-            "show reservations",
-        ]
-        if any(phrase in user_input_lower for phrase in show_keywords):
+        if self._show_reservations_phrases(user_input):
             state["intent"] = "show_reservations"
             return state
-        reservation_keywords = [
-            "reserve",
-            "reservation",
-            "book",
-            "booking",
-            "parking spot",
-            "parking space",
-            "date",
-            "preferred date",
-        ]
         state["intent"] = (
-            "reservation" if any(k in user_input_lower for k in reservation_keywords) else "general"
+            "reservation" if self._wants_to_make_reservation(user_input) else "general"
         )
         return state
 
     def _route_intent(self, state: Dict[str, Any]) -> str:
         return state.get("intent", "general")
+
+    def _show_reservations_phrases(self, text: str) -> bool:
+        """True if user is asking to see their reservations (used for routing and fallback)."""
+        t = text.lower()
+        phrases = [
+            "show my reservations", "my reservations", "active reservations",
+            "list my reservations", "list reservations", "show reservations",
+            "view my reservations", "view reservations",
+        ]
+        return any(p in t for p in phrases)
+
+    def _wants_to_make_reservation(self, text: str) -> bool:
+        """True if user is clearly trying to make a booking (not just asking about reservations)."""
+        t = text.lower()
+        phrases = [
+            "want to reserve", "want to book", "make a reservation", "make a booking",
+            "book a spot", "book a space", "reserve a spot", "reserve a space",
+            "i'd like to book", "i would like to book", "i want to book",
+            "need to reserve", "need a reservation", "need to book",
+            "can i book", "can i reserve", "i want to make a reservation",
+        ]
+        return any(p in t for p in phrases)
 
     def _handle_general_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
         messages = state.get("messages", [])
@@ -77,22 +81,14 @@ class ParkingChatbot:
             return state
         last_message = messages[-1]
         user_input = last_message.content if hasattr(last_message, "content") else str(last_message)
+        # If user asked to show reservations but was routed to general, handle it here
+        if self._show_reservations_phrases(user_input):
+            return self._handle_show_reservations(state)
         # If we're already collecting a reservation (e.g. waiting for date), treat this message as reservation input
         if self.reservation_handler.get_current_reservation() is not None:
             return self._handle_reservation(state)
-        if any(
-            k in user_input.lower()
-            for k in [
-                "reserve",
-                "reservation",
-                "book",
-                "booking",
-                "name",
-                "surname",
-                "car number",
-                "license plate",
-            ]
-        ):
+        # Only redirect to reservation if user clearly wants to make a booking (not just mentioned "book" in a question)
+        if self._wants_to_make_reservation(user_input):
             return self._handle_reservation(state)
         try:
             response = self.rag_system.generate_response(user_input)
