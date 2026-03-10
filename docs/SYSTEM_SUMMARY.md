@@ -55,20 +55,22 @@ flowchart TB
 
 1. User input → `chatbot.chat(user_input, conversation_history)`.
 2. State = `{messages: history + HumanMessage(user_input)}`; `graph.invoke(state)`.
-3. **classify_intent** (last message) → one of three handlers.
+3. **handle_general_query** is always the single graph node: it runs first, then delegates internally.
 4. Handler appends AIMessage → END; last AI message returned to run.py; response printed and appended to history.
 
-**Intent routing**
+**Intent routing (inside handle_general_query)**
 
-- **show_reservations** — e.g. "show my reservations" → handle_show_reservations (DB only).
-- **reservation** — "reserve", "book", date, etc. → handle_reservation (guardrails + date/range → DB).
-- **general** — else → handle_general_query; if reservation in progress or reservation keywords, re-route to handle_reservation; else RAG (query validation → retrieval → LLM → response validation).
+- If **reservation in progress** (`get_current_reservation()` is not None): if the message **looks like a date** (YYYY-MM-DD or date range) → `_handle_reservation`. Otherwise **LLM classifies intent** so the user can do something else: **show_reservations** or **general** clear the current reservation and run that handler/RAG; **reserve** or unclear → `_handle_reservation`.
+- Else **LLM classifies intent** via `rag_system.classify_intent(user_input)` → one of: **reserve**, **show_reservations**, **general**.
+  - **reserve** → `_handle_reservation` (guardrails + date/range → DB).
+  - **show_reservations** → `_handle_show_reservations` (DB only, list dates).
+  - **general** → RAG: query validation → retrieval → LLM → response validation; answer is returned as the AI message.
 
 **Handler data flow (summary)**
 
 - **handle_show_reservations:** `get_reservations_by_nickname(nickname)` → one AI message. No RAG/LLM.
 - **handle_reservation:** validate_query(allow_reservation_data=True); parse date or range (YYYY-MM-DD or YYYY-MM-DD - YYYY-MM-DD); for each date `get_free_spaces` then `add_reservation`; one row per day. Writes only `reservations`.
-- **handle_general_query (RAG):** validate_query (full); similarity_search + get_prices/get_working_hours; filter_retrieved_documents; LLM prompt; validate_response. Reads vector store + prices + working_hours; writes nothing.
+- **handle_general_query (when general):** validate_query (full); similarity_search + get_prices/get_working_hours; filter_retrieved_documents; LLM prompt; validate_response. Reads vector store + prices + working_hours; writes nothing.
 
 ```mermaid
 flowchart TB
@@ -86,21 +88,19 @@ flowchart TB
   subgraph permsg["Per message"]
     U[User input] --> CHAT[chatbot.chat]
     CHAT --> INV[graph.invoke]
-    INV --> CI[classify_intent]
-    CI --> H1[handle_show_reservations]
-    CI --> H2[handle_reservation]
-    CI --> H3[handle_general_query]
-    H1 --> END[END → AI message]
-    H2 --> END
-    H3 --> END
+    INV --> HG[handle_general_query]
+    HG --> END[END → AI message]
   end
 ```
 
 ```mermaid
 flowchart LR
-  CI[classify_intent] --> S[show_reservations]
-  CI --> R[reservation]
-  CI --> G[general]
+  subgraph HG["handle_general_query"]
+    LLM_INTENT[LLM classify_intent]
+    LLM_INTENT --> S[show_reservations]
+    LLM_INTENT --> R[reserve]
+    LLM_INTENT --> G[general]
+  end
   S --> DB1[(reservations)]
   R --> GR[GuardRails] --> DB2[(availability\nreservations)]
   G --> RAG[RAG: retrieve + LLM] --> DB3[(prices\nworking_hours)]
@@ -129,7 +129,7 @@ flowchart LR
 **Components**
 
 - **VectorStore** — EmbeddingGenerator + FAISSStore; `similarity_search`, `get_relevant_context`.
-- **RAGSystem** — VectorStore, LLMProvider, GuardRails, optional DB; `generate_response` implements the steps above.
+- **RAGSystem** — VectorStore, LLMProvider, GuardRails, optional DB; `classify_intent(user_input)` uses the LLM to return one of `reserve`, `show_reservations`, `general`; `generate_response` implements the RAG steps above.
 
 ```mermaid
 flowchart LR

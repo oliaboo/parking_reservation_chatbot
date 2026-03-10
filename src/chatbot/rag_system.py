@@ -135,3 +135,28 @@ Answer:""",
 
     def get_context_string(self, query: str) -> str:
         return self.vector_store.get_relevant_context(query, k=self.k)
+
+    INTENT_PROMPT = """You are a parking assistant. Classify the user's intent into exactly one of: reserve, show_reservations, general.
+
+- reserve: the user wants to make or book a new parking reservation.
+- show_reservations: the user wants to see, list, or view their existing reservations.
+- general: any other question, statement, or request (e.g. opening hours, prices, how to book, general info).
+
+User message: {user_input}
+
+Reply with only one word: reserve, show_reservations, or general."""
+
+    def classify_intent(self, user_input: str) -> str:
+        """Use LLM to classify user intent as reserve, show_reservations, or general."""
+        prompt = self.INTENT_PROMPT.format(user_input=user_input)
+        llm = getattr(self, "llm", None) or self.llm_provider.get_llm()
+        result = llm.invoke(prompt)
+        text = (result.content if hasattr(result, "content") else str(result)).strip().lower()
+        for word in text.replace("\n", " ").split():
+            if word in ("reserve", "show_reservations", "general"):
+                return word
+        if "show_reservation" in text:
+            return "show_reservations"
+        if "reserve" in text:
+            return "reserve"
+        return "general"

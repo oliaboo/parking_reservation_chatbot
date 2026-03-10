@@ -140,23 +140,23 @@ parking_reservation_chatbot/
 
 ## 7. Chatbot layer: src/chatbot/
 
-**Role:** Orchestrate conversation: classify intent, call RAG or reservation logic or show reservations, return one reply per turn.
+**Role:** Orchestrate conversation: every turn goes through handle_general_query, which uses the LLM to classify intent and then calls RAG, reservation logic, or show reservations; return one reply per turn.
 
 ### chatbot.py
 
-- **ParkingChatbot:** Builds a LangGraph `StateGraph(Dict)` with nodes: classify_intent, handle_general_query, handle_reservation, handle_show_reservations. State is `{"messages": [...]}`.
-- **classify_intent:** Sets `state["intent"]` to "show_reservations" | "reservation" | "general" from keywords in the last user message.
-- **Routing:** Conditional edges from classify_intent to the three handlers; each handler appends an AIMessage and goes to END.
-- **handle_general_query:** Re-route to reservation if there is an active reservation or reservation keywords; else call `rag_system.generate_response(user_input)` and append response (with error handling).
-- **handle_reservation:** Validate query with guardrails (reservation mode), then start reservation or process_user_input (date/range) and return the handler’s message.
-- **handle_show_reservations:** `reservation_handler.get_active_reservations()` → format and return as one AI message.
+- **ParkingChatbot:** Builds a LangGraph `StateGraph(Dict)` with a single node: **handle_general_query**. Entry → handle_general_query → END. State is `{"messages": [...]}`.
+- **handle_general_query (always runs):** If reservation in progress (waiting for date): if message looks like a date (YYYY-MM-DD or range) → `_handle_reservation(state)`; else classify intent so the user can do something else — **show_reservations** or **general** clear the reservation and run that path, **reserve** → `_handle_reservation`. When not in reservation, classify intent and route to `_handle_reservation`, `_handle_show_reservations`, or `rag_system.generate_response` accordingly.
+- **_handle_reservation** (internal): Validate query with guardrails (reservation mode), then start reservation or process_user_input (date/range) and return the handler message.
+- **_handle_show_reservations** (internal): `reservation_handler.get_active_reservations()` → format and return as one AI message.
+- **_looks_like_date(text):** True if input matches a single date (YYYY-MM-DD) or date range; used when in reservation so date-like input goes to `_handle_reservation` and other input is intent-classified (user can cancel, show reservations, or ask a question).
 - **chat(user_input, conversation_history):** Build state with messages, invoke graph, return last AI message content.
 
-**Uses:** RAGSystem, ReservationHandler (and thus db for reservations and show-reservations).
+**Uses:** RAGSystem (classify_intent + generate_response), ReservationHandler (and thus db for reservations and show-reservations).
 
 ### rag_system.py
 
 - **RAGSystem:** Combines vector store, LLM, guard rails, and optional `db`. Builds a prompt template (context + question → answer). Uses either a QA chain (if available) or a simple “format prompt + llm.invoke” path.
+- **classify_intent(user_input):** Uses the LLM with a short prompt to classify the user's intent into **reserve**, **show_reservations**, or **general**. Used by the chatbot for routing each turn.
 - **generate_response(query):**
   1. Retrieve documents: `vector_store.similarity_search(query, k)` (from parking_info.txt).
   2. Append dynamic context: `db.get_prices()`, `db.get_working_hours()` formatted as text.

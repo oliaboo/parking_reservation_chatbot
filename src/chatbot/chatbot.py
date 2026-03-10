@@ -1,5 +1,6 @@
 """Main chatbot implementation using LangGraph"""
 
+import re
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -17,79 +18,25 @@ class ParkingChatbot:
 
     def _build_graph(self) -> StateGraph:
         workflow = StateGraph(Dict)
-        workflow.add_node("classify_intent", self._classify_intent)
         workflow.add_node("handle_general_query", self._handle_general_query)
-        workflow.add_node("handle_reservation", self._handle_reservation)
-        workflow.add_node("handle_show_reservations", self._handle_show_reservations)
-        workflow.set_entry_point("classify_intent")
-        workflow.add_conditional_edges(
-            "classify_intent",
-            self._route_intent,
-            {
-                "general": "handle_general_query",
-                "reservation": "handle_reservation",
-                "show_reservations": "handle_show_reservations",
-            },
-        )
+        workflow.set_entry_point("handle_general_query")
         workflow.add_edge("handle_general_query", END)
-        workflow.add_edge("handle_reservation", END)
-        workflow.add_edge("handle_show_reservations", END)
         return workflow.compile()
 
-    def _classify_intent(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        messages = state.get("messages", [])
-        if not messages:
-            return state
-        last_message = messages[-1]
-        user_input = last_message.content if hasattr(last_message, "content") else str(last_message)
-        if self._show_reservations_phrases(user_input):
-            state["intent"] = "show_reservations"
-            return state
-        state["intent"] = (
-            "reservation" if self._wants_to_make_reservation(user_input) else "general"
-        )
-        return state
+    def _looks_like_date(self, text: str) -> bool:
+        """True if input looks like a single date (YYYY-MM-DD) or a date range."""
+        t = text.strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}\s*$", t):
+            return True
+        if re.search(r"\d{4}-\d{2}-\d{2}\s*[-–to]+\s*\d{4}-\d{2}-\d{2}", t, re.IGNORECASE):
+            return True
+        # MM/DD/YYYY or DD/MM/YYYY
+        if re.match(r"^\d{1,2}/\d{1,2}/\d{4}\s*$", t):
+            return True
+        return False
 
-    def _route_intent(self, state: Dict[str, Any]) -> str:
-        return state.get("intent", "general")
-
-    def _show_reservations_phrases(self, text: str) -> bool:
-        """True if user is asking to see their reservations (used for routing and fallback)."""
-        t = text.lower()
-        phrases = [
-            "show my reservations", "my reservations", "active reservations",
-            "list my reservations", "list reservations", "show reservations",
-            "view my reservations", "view reservations",
-        ]
-        return any(p in t for p in phrases)
-
-    def _wants_to_make_reservation(self, text: str) -> bool:
-        """True if user is clearly trying to make a booking (not just asking about reservations)."""
-        t = text.lower()
-        phrases = [
-            "want to reserve", "want to book", "make a reservation", "make a booking",
-            "book a spot", "book a space", "reserve a spot", "reserve a space",
-            "i'd like to book", "i would like to book", "i want to book",
-            "need to reserve", "need a reservation", "need to book",
-            "can i book", "can i reserve", "i want to make a reservation",
-        ]
-        return any(p in t for p in phrases)
-
-    def _handle_general_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        messages = state.get("messages", [])
-        if not messages:
-            return state
-        last_message = messages[-1]
-        user_input = last_message.content if hasattr(last_message, "content") else str(last_message)
-        # If user asked to show reservations but was routed to general, handle it here
-        if self._show_reservations_phrases(user_input):
-            return self._handle_show_reservations(state)
-        # If we're already collecting a reservation (e.g. waiting for date), treat this message as reservation input
-        if self.reservation_handler.get_current_reservation() is not None:
-            return self._handle_reservation(state)
-        # Only redirect to reservation if user clearly wants to make a booking (not just mentioned "book" in a question)
-        if self._wants_to_make_reservation(user_input):
-            return self._handle_reservation(state)
+    def _answer_with_rag(self, state: Dict[str, Any], messages: List, user_input: str) -> Dict[str, Any]:
+        """Produce RAG response, append AIMessage, return state."""
         try:
             response = self.rag_system.generate_response(user_input)
         except ValueError as e:
@@ -103,6 +50,39 @@ class ParkingChatbot:
         messages.append(AIMessage(content=response))
         state["messages"] = messages
         return state
+
+    def _handle_general_query(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        messages = state.get("messages", [])
+        if not messages:
+            return state
+        last_message = messages[-1]
+        user_input = last_message.content if hasattr(last_message, "content") else str(last_message)
+
+        # If we're already collecting a reservation, allow other actions unless they're giving a date
+        if self.reservation_handler.get_current_reservation() is not None:
+            if self._looks_like_date(user_input):
+                return self._handle_reservation(state)
+            intent = self.rag_system.classify_intent(user_input)
+            if intent == "show_reservations":
+                self.reset_conversation()
+                return self._handle_show_reservations(state)
+            if intent == "general":
+                self.reset_conversation()
+                return self._answer_with_rag(state, messages, user_input)
+            else:
+                # intent == "reserve" or unclear: treat as reservation input
+                return self._handle_reservation(state)
+
+        # Use LLM to classify intent: reserve, show_reservations, or general
+        intent = self.rag_system.classify_intent(user_input)
+
+        if intent == "reserve":
+            return self._handle_reservation(state)
+        if intent == "show_reservations":
+            return self._handle_show_reservations(state)
+
+        # General question/statement: answer using RAG (LLM with context)
+        return self._answer_with_rag(state, messages, user_input)
 
     def _handle_show_reservations(self, state: Dict[str, Any]) -> Dict[str, Any]:
         messages = state.get("messages", [])

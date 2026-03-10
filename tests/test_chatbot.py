@@ -1,4 +1,4 @@
-"""Simple tests for chatbot-related behavior (show reservations, intent keywords)."""
+"""Simple tests for chatbot-related behavior (show reservations, intent keywords, reservation-in-progress escape)."""
 
 import sys
 from pathlib import Path
@@ -10,6 +10,7 @@ import tempfile
 from unittest.mock import MagicMock
 
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage
 from src.chatbot.chatbot import ParkingChatbot
 from src.chatbot.reservation_handler import ReservationHandler
 from src.db.sqlite_db import SQLiteDB
@@ -52,6 +53,7 @@ def test_chat_show_my_reservations_invokes_show_reservations_handler(temp_db):
     handler = ReservationHandler(db=temp_db)
     handler.set_nickname("alice")
     mock_rag = MagicMock()
+    mock_rag.classify_intent = MagicMock(return_value="show_reservations")
     mock_rag.generate_response = MagicMock(return_value="RAG would say this")
     chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
     response = chatbot.chat("Show my reservations")
@@ -65,6 +67,7 @@ def test_chat_general_questions_go_to_rag_not_reservation(temp_db):
     handler = ReservationHandler(db=temp_db)
     handler.set_nickname("alice")
     mock_rag = MagicMock()
+    mock_rag.classify_intent = MagicMock(return_value="general")
     mock_rag.generate_response = MagicMock(return_value="Our reservation policy is flexible.")
     chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
     response = chatbot.chat("What is your reservation policy?")
@@ -77,6 +80,7 @@ def test_chat_booking_intent_goes_to_reservation(temp_db):
     handler = ReservationHandler(db=temp_db)
     handler.set_nickname("alice")
     mock_rag = MagicMock()
+    mock_rag.classify_intent = MagicMock(return_value="reserve")
     mock_rag.generate_response = MagicMock(return_value="RAG response")
     mock_rag.guard_rails = MagicMock()
     mock_rag.guard_rails.validate_query = MagicMock(return_value=(True, None))
@@ -84,3 +88,75 @@ def test_chat_booking_intent_goes_to_reservation(temp_db):
     response = chatbot.chat("I want to make a reservation")
     mock_rag.generate_response.assert_not_called()
     assert "reservation" in response.lower() or "date" in response.lower() or "help" in response.lower()
+
+
+def test_looks_like_date_accepts_single_and_range():
+    """_looks_like_date returns True for YYYY-MM-DD and date ranges."""
+    handler = ReservationHandler(db=MagicMock())
+    mock_rag = MagicMock()
+    chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
+    assert chatbot._looks_like_date("2025-03-15") is True
+    assert chatbot._looks_like_date("  2025-03-15  ") is True
+    assert chatbot._looks_like_date("2025-03-10 - 2025-03-15") is True
+    assert chatbot._looks_like_date("2025-03-10 to 2025-03-15") is True
+    assert chatbot._looks_like_date("3/15/2025") is True
+    assert chatbot._looks_like_date("show my reservations") is False
+    assert chatbot._looks_like_date("cancel") is False
+    assert chatbot._looks_like_date("What are your hours?") is False
+
+
+def test_reservation_in_progress_date_like_goes_to_reservation(temp_db):
+    """When waiting for date, a date-like message goes to reservation without calling classify_intent again."""
+    handler = ReservationHandler(db=temp_db)
+    handler.set_nickname("alice")
+    mock_rag = MagicMock()
+    mock_rag.classify_intent = MagicMock(return_value="reserve")
+    mock_rag.guard_rails = MagicMock()
+    mock_rag.guard_rails.validate_query = MagicMock(return_value=(True, None))
+    chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
+    # Start reservation
+    r1 = chatbot.chat("I want to make a reservation")
+    assert "date" in r1.lower() or "reservation" in r1.lower()
+    history = [HumanMessage(content="I want to make a reservation"), AIMessage(content=r1)]
+    # Send date: should be treated as reservation input (date-like), not trigger classify_intent
+    r2 = chatbot.chat("2025-03-15", conversation_history=history)
+    assert mock_rag.classify_intent.call_count == 1
+    assert "2025-03-15" in handler.get_active_reservations() or "2025-03-15" in r2 or "saved" in r2.lower()
+
+
+def test_reservation_in_progress_show_reservations_clears_and_shows(temp_db):
+    """When waiting for date, 'show my reservations' clears reservation and returns list."""
+    temp_db.add_reservation("alice", "2025-03-10")
+    handler = ReservationHandler(db=temp_db)
+    handler.set_nickname("alice")
+    mock_rag = MagicMock()
+    mock_rag.classify_intent = MagicMock(side_effect=["reserve", "show_reservations"])
+    mock_rag.generate_response = MagicMock(return_value="RAG response")
+    mock_rag.guard_rails = MagicMock()
+    mock_rag.guard_rails.validate_query = MagicMock(return_value=(True, None))
+    chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
+    r1 = chatbot.chat("I want to book a spot")
+    history = [HumanMessage(content="I want to book a spot"), AIMessage(content=r1)]
+    r2 = chatbot.chat("show my reservations", conversation_history=history)
+    assert "2025-03-10" in r2
+    assert "active reservations" in r2.lower()
+    assert handler.get_current_reservation() is None
+    mock_rag.generate_response.assert_not_called()
+
+
+def test_reservation_in_progress_general_clears_and_answers_rag(temp_db):
+    """When waiting for date, a general question clears reservation and returns RAG answer."""
+    handler = ReservationHandler(db=temp_db)
+    handler.set_nickname("alice")
+    mock_rag = MagicMock()
+    mock_rag.classify_intent = MagicMock(side_effect=["reserve", "general"])
+    mock_rag.generate_response = MagicMock(return_value="We are open 9 to 5.")
+    mock_rag.guard_rails = MagicMock()
+    mock_rag.guard_rails.validate_query = MagicMock(return_value=(True, None))
+    chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
+    r1 = chatbot.chat("I want to make a reservation")
+    history = [HumanMessage(content="I want to make a reservation"), AIMessage(content=r1)]
+    r2 = chatbot.chat("What are your hours?", conversation_history=history)
+    assert "9" in r2 or "5" in r2 or "open" in r2.lower()
+    assert handler.get_current_reservation() is None
+    assert mock_rag.generate_response.call_count == 1
