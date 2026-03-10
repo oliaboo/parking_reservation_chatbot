@@ -36,7 +36,7 @@ class VectorStore:
                     metric=self.faiss_metric,
                 )
             else:
-                raise NotImplementedError("Real Weaviate client not yet implemented")
+                raise NotImplementedError("Only FAISS backend is supported")
         return self._client
 
     def add_documents(

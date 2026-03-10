@@ -22,7 +22,7 @@ run.py (main)
 
 **initialize_system(nickname)** builds the full stack:
 
-1. **VectorStore** — embedding model (e.g. sentence-transformers), mock Weaviate client that loads and embeds chunks from `parking_info.txt`.
+1. **VectorStore** — embedding model (e.g. sentence-transformers), FAISS-backed vector store that loads and embeds chunks from `parking_info.txt`.
 2. **GuardRails** — enabled by config, wraps SensitiveDataFilter (patterns for SSN, card, email, phone).
 3. **LLMProvider** — GPT4All, loads local model from `settings.model_path` (e.g. `local_models/Meta-Llama-3-8B-Instruct.Q4_0.gguf`).
 4. **RAGSystem** — vector_store + llm_provider + guard_rails + **db** (for prices and working hours in context).
@@ -123,7 +123,7 @@ Data written: only `reservations` table (nickname + date per row). Read: `availa
   - **general** → RAG response:
     1. **Query validation:** `rag_system.guard_rails.validate_query(user_input)` — full sensitive-data check (SSN, card, email, phone). If not safe → return error message, no RAG.
     2. **Retrieve context:** inside `rag_system.generate_response(user_input)`:
-       - **Vector store:** `vector_store.similarity_search(query, k)` → mock Weaviate uses embeddings from `parking_info.txt` chunks.
+       - **Vector store:** `vector_store.similarity_search(query, k)` → FAISS uses embeddings from `parking_info.txt` chunks.
        - **Dynamic context:** `db.get_prices()` and `db.get_working_hours()` → formatted text appended to context.
        - **Guardrails:** `guard_rails.filter_retrieved_documents(documents)`.
     3. **LLM:** Prompt = "Use the following context... Context: {vector + dynamic}\n\nQuestion: {query}\nAnswer:". LLM generates answer.
@@ -145,7 +145,7 @@ Data read: vector store (from file), `prices` and `working_hours` tables. Nothin
 
 **Files and storage:**
 
-- **Static text:** `parking_info.txt` → split into chunks → embedded and stored in mock Weaviate (in memory).
+- **Static text:** `parking_info.txt` → split into chunks → embedded and stored in FAISS index (on disk in rag_data/).
 - **Dynamic data:** SQLite `data/parking.db` — users, reservations, working_hours, prices, availability.
 
 ---

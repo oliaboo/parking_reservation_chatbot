@@ -34,7 +34,7 @@ Output includes mean Recall@1, Recall@3, Recall@5, Precision@1/3/5, mean retriev
 
 ### 1. Evaluation module (`src/evaluation/`)
 
-- **`eval_dataset.py`** — Defines `EvalItem(query, relevant_doc_ids)` and `DEFAULT_EVAL_DATASET`: list of queries with the doc IDs (from the mock Weaviate chunk order) that should be retrieved. Chunk IDs 1, 2, 3, … correspond to the order of paragraphs/sections in `parking_info.txt`.
+- **`eval_dataset.py`** — Defines `EvalItem(query, relevant_doc_ids)` and `DEFAULT_EVAL_DATASET`: list of queries with the doc IDs (chunk order in parking_info.txt) that should be retrieved. Chunk IDs 1, 2, 3, … correspond to the order of paragraphs/sections in `parking_info.txt`.
 - **`rag_evaluator.py`** — `RAGEvaluator(vector_store, eval_dataset, k_values)`:
   - `run_retrieval_evaluation()` — For each eval query, runs `vector_store.similarity_search(query, k=max_k)`, then **filters** the top-k results to those with **similarity score ≥ min_score_threshold** (default 0.4), measures latency, and computes Recall@K and Precision@K for each K in `k_values` (using the filtered list).
   - `run_performance_test(num_runs, k)` — Runs retrieval repeatedly and returns mean/min/max latency.
@@ -43,7 +43,7 @@ Output includes mean Recall@1, Recall@3, Recall@5, Precision@1/3/5, mean retriev
 
 ### 2. Script `run_evaluation.py`
 
-1. Loads the same `VectorStore` as the chatbot (embedding model + mock Weaviate with `parking_info.txt`).
+1. Loads the same `VectorStore` as the chatbot (embedding model + FAISS over `parking_info.txt`).
 2. Creates `RAGEvaluator` with default dataset and `k_values=[1, 3, 5]`.
 3. Runs `run_retrieval_evaluation()` and prints the report (with optional per-query details).
 4. Runs `run_performance_test(5, 5)` and prints mean/min/max latency.

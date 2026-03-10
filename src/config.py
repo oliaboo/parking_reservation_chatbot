@@ -18,11 +18,8 @@ class Settings(BaseSettings):
     temperature: float = float(os.getenv("TEMPERATURE", "0.7"))
     max_context_length: int = int(os.getenv("MAX_CONTEXT_LENGTH", "2048"))
 
-    # Vector Database Configuration
-    weaviate_url: str = os.getenv("WEAVIATE_URL", "http://localhost:8080")
-    weaviate_api_key: str = os.getenv("WEAVIATE_API_KEY", "")
-    weaviate_class_name: str = os.getenv("WEAVIATE_CLASS_NAME", "ParkingInfo")
-    use_mock_db: bool = True  # Use mock for now
+    # Vector store (FAISS over rag_data/parking_info.txt)
+    use_mock_db: bool = True  # Use FAISS over parking_info.txt
     # FAISS similarity: "cosine" (IndexFlatIP + normalized) or "l2" (IndexFlatL2, Euclidean)
     faiss_metric: str = os.getenv("FAISS_METRIC", "cosine").lower()
 

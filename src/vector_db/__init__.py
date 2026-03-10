@@ -1,6 +1,5 @@
-"""Vector store and mock Weaviate."""
+"""Vector store (FAISS over rag_data/parking_info.txt)."""
 
-from .mock_weaviate import MockWeaviateClient, get_mock_client
 from .vector_store import VectorStore
 
-__all__ = ["VectorStore", "get_mock_client", "MockWeaviateClient"]
+__all__ = ["VectorStore"]

@@ -1,6 +1,6 @@
 """
 Evaluation dataset for RAG retrieval.
-Each item: query + set of relevant document IDs (from mock Weaviate, 1-based string IDs).
+Each item: query + set of relevant document IDs (1-based string IDs, same order as chunks in parking_info.txt).
 Chunks from parking_info.txt correspond to doc IDs 1, 2, 3, ... (by paragraph/section order).
 
 parking_info.txt chunk layout:

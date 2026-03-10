@@ -32,8 +32,7 @@ parking_reservation_chatbot/
     │   ├── vector_store.py
     │   ├── embeddings.py
     │   ├── parking_info_loader.py   # Load and chunk parking_info.txt
-    │   ├── faiss_store.py           # FAISS index for similarity search
-    │   └── mock_weaviate.py         # Optional mock for tests
+    │   └── faiss_store.py           # FAISS index for similarity search
     ├── guardrails/        # Sensitive data filtering
     │   ├── __init__.py
     │   ├── guard_rails.py
@@ -69,7 +68,7 @@ parking_reservation_chatbot/
 
 **Role:** Central settings from environment and `.env`.
 
-- **Settings:** Model path, temperature, max tokens, Weaviate URL (for future use), `use_mock_db`, embedding model name, guardrails enabled/threshold, log level/file, chatbot name, retrieval_k, etc.
+- **Settings:** Model path, temperature, max tokens, `use_mock_db` (FAISS backend), embedding model name, guardrails enabled/threshold, log level/file, chatbot name, retrieval_k, etc.
 - **Usage:** Imported as `settings` everywhere (run.py, and inside components that need paths or flags). No direct DB or chat logic.
 
 ---
@@ -93,7 +92,7 @@ parking_reservation_chatbot/
 
 ## 5. Vector store: src/vector_db/
 
-**Role:** Provide text chunks and similarity search for RAG. Uses FAISS over `parking_info.txt`; production Weaviate is optional.
+**Role:** Provide text chunks and similarity search for RAG. Uses FAISS over `rag_data/parking_info.txt`.
 
 ### vector_store.py
 
@@ -108,15 +107,11 @@ parking_reservation_chatbot/
 
 ### parking_info_loader.py
 
-- **load_parking_info_chunks():** Reads `rag_data/parking_info.txt`, splits by blank lines into paragraphs; returns list of `{content, metadata}`. Shared by FAISSStore and mock_weaviate.
+- **load_parking_info_chunks():** Reads `rag_data/parking_info.txt`, splits by blank lines into paragraphs; returns list of `{content, metadata}`. Used by FAISSStore.
 
 ### faiss_store.py
 
-- **FAISSStore:** On init loads chunks via `load_parking_info_chunks()`, embeds them with the given EmbeddingGenerator, builds a FAISS IndexFlatIP (cosine via normalized vectors). **query(query_vector, limit):** returns top-k documents with id, content, metadata, score. Used as the default RAG backend when `use_mock=True`.
-
-### mock_weaviate.py
-
-- **MockWeaviateClient:** In-memory fallback using the same chunking (parking_info_loader). Used in tests or when FAISS is not desired; not used by default in run.py.
+- **FAISSStore:** On init loads chunks via `load_parking_info_chunks()`, embeds them with the given EmbeddingGenerator, builds a FAISS index (cosine or L2 per config). **query(query_vector, limit):** returns top-k documents with id, content, metadata, score. Used as the RAG backend when `use_mock_db=True`.
 
 ---
 
@@ -185,7 +180,7 @@ parking_reservation_chatbot/
 - **ParkingChatbot** → RAGSystem (general answers), ReservationHandler (reservations and show reservations).
 - **RAGSystem** → VectorStore (parking_info.txt), LLMProvider (local LLM), GuardRails, SQLiteDB (prices, working_hours).
 - **ReservationHandler** → SQLiteDB (availability, reservations).
-- **VectorStore** → EmbeddingGenerator, MockWeaviateClient (which reads parking_info.txt and, when given an embedding generator, embeds chunks for real similarity search).
+- **VectorStore** → EmbeddingGenerator, FAISSStore (reads parking_info.txt, embeds chunks, similarity search).
 
 No circular imports: config and db have no chatbot/vector/guardrail imports; chatbot imports rag and reservation; rag imports vector, guardrails, llm, and db.
 

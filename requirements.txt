@@ -8,9 +8,6 @@ langgraph>=0.2.0
 # Vector search (RAG over parking_info.txt)
 faiss-cpu>=1.7.4
 
-# Vector database (for future Weaviate integration)
-weaviate-client>=4.0.0
-
 # Embeddings
 sentence-transformers>=2.7.0
 
