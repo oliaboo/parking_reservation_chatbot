@@ -56,7 +56,7 @@ No database or LLM is required; only the vector store (and thus the embedding mo
 |--------|-------------|
 | `-o FILE`, `--output FILE` | Write the full report (including all per-query details) to FILE. |
 | `--min-score T` | Minimum similarity score to count a chunk (default 0.4). Only chunks with score ≥ T are used for Recall@K and Precision@K. |
-| `--remove-index` | After the run, delete the FAISS index files `data/faiss_parking.index` and `data/faiss_parking_docs.json`. Use this to force a fresh index on the next run (e.g. after changing `FAISS_METRIC` or `parking_info.txt`). |
+| `--remove-index` | After the run, delete the FAISS index files `rag_data/faiss_parking.index` and `rag_data/faiss_parking_docs.json`. Use this to force a fresh index on the next run (e.g. after changing `FAISS_METRIC` or `parking_info.txt`). |
 
 ---
 
@@ -90,7 +90,7 @@ The vector store uses FAISS with a configurable similarity metric (env **`FAISS_
 - **`cosine`** — Normalized vectors + `IndexFlatIP` (inner product = cosine similarity). Scores in [-1, 1].
 - **`l2`** — `IndexFlatL2` (squared Euclidean distance). Scores are returned as `1/(1+distance)` so higher = more similar; evaluation’s `min_score_threshold` behaves the same.
 
-**Changing the metric requires rebuilding the index:** delete `data/faiss_parking.index` (and optionally `data/faiss_parking_docs.json`), then run the chatbot or `run_evaluation.py` so the index is rebuilt with the new metric. You can also run `python run_evaluation.py --remove-index` to delete the index files after an evaluation run, so the next run rebuilds from scratch.
+**Changing the metric requires rebuilding the index:** delete `rag_data/faiss_parking.index` (and optionally `rag_data/faiss_parking_docs.json`), then run the chatbot or `run_evaluation.py` so the index is rebuilt with the new metric. You can also run `python run_evaluation.py --remove-index` to delete the index files after an evaluation run, so the next run rebuilds from scratch.
 
 ---
 

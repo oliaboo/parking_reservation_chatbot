@@ -9,9 +9,9 @@ Structured overview of the Parking Reservation Chatbot: data storages, data flow
 | Storage | Location | Role |
 |--------|----------|------|
 | **SQLite** | `data/parking.db` | All dynamic data. Single DB instance shared by RAG and reservations. |
-| **Static text** | `data/parking_info.txt` | Source for RAG: location, capacity, hours, booking, payment, contact. |
-| **FAISS index** | `data/faiss_parking.index` | Vector index (embeddings of chunks). Built from parking_info.txt; load/save on disk. |
-| **Doc store** | `data/faiss_parking_docs.json` | Id, content, metadata per chunk; used to resolve FAISS results to text. |
+| **Static text** | `rag_data/parking_info.txt` | Source for RAG: location, capacity, hours, booking, payment, contact. |
+| **FAISS index** | `rag_data/faiss_parking.index` | Vector index (embeddings of chunks). Built from parking_info.txt; load/save on disk. |
+| **Doc store** | `rag_data/faiss_parking_docs.json` | Id, content, metadata per chunk; used to resolve FAISS results to text. |
 
 **SQLite schema**
 
@@ -29,11 +29,13 @@ Structured overview of the Parking Reservation Chatbot: data storages, data flow
 
 ```mermaid
 flowchart TB
-  subgraph data["data/"]
-    DB[(parking.db\nusers, reservations,\nworking_hours, prices, availability)]
+  subgraph rag["rag_data/"]
     TXT[parking_info.txt]
     IDX[faiss_parking.index]
     DOC[faiss_parking_docs.json]
+  end
+  subgraph data["data/"]
+    DB[(parking.db\nusers, reservations,\nworking_hours, prices, availability)]
   end
   TXT --> IDX
   TXT --> DOC
@@ -114,8 +116,8 @@ flowchart LR
 
 **Build (once)**
 
-- `data/parking_info.txt` → **load_parking_info_chunks()** (split by blank lines) → list of `{content, metadata}`.
-- Chunks → **EmbeddingGenerator** (sentence-transformers) → vectors → **FAISS IndexFlatIP** (normalized → cosine). Index and doc store saved to disk (`data/faiss_parking.index`, `data/faiss_parking_docs.json`). On next run, load from disk if present.
+- `rag_data/parking_info.txt` → **load_parking_info_chunks()** (split by blank lines) → list of `{content, metadata}`.
+- Chunks → **EmbeddingGenerator** (sentence-transformers) → vectors → **FAISS IndexFlatIP** (normalized → cosine). Index and doc store saved to disk (`rag_data/faiss_parking.index`, `rag_data/faiss_parking_docs.json`). On next run, load from disk if present.
 
 **Query path (generate_response)**
 

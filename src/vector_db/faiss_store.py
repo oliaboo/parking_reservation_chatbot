@@ -24,8 +24,8 @@ except ImportError:
 
 # Default paths under project root / data (index and doc store saved to disk)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_FAISS_INDEX_PATH = _PROJECT_ROOT / "data" / "faiss_parking.index"
-DEFAULT_FAISS_DOCS_PATH = _PROJECT_ROOT / "data" / "faiss_parking_docs.json"
+DEFAULT_FAISS_INDEX_PATH = _PROJECT_ROOT / "rag_data" / "faiss_parking.index"
+DEFAULT_FAISS_DOCS_PATH = _PROJECT_ROOT / "rag_data" / "faiss_parking_docs.json"
 
 
 def _normalize(x: np.ndarray) -> np.ndarray:

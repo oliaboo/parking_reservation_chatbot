@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any, Dict, List
 
-PARKING_INFO_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "parking_info.txt"
+PARKING_INFO_PATH = Path(__file__).resolve().parent.parent.parent / "rag_data" / "parking_info.txt"
 
 
 def load_parking_info_chunks() -> List[Dict[str, Any]]:

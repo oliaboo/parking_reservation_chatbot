@@ -57,6 +57,9 @@ Thumbs.db
 
 # Project specific
 data/
+rag_data/*
+!rag_data/README.md
+!rag_data/parking_info.txt
 logs/
 local_models/
 *.db

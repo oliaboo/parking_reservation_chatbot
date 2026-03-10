@@ -9,7 +9,7 @@ _project_root = Path(__file__).resolve().parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-# Change to project root so paths like local_models/ and data/ resolve correctly
+# Change to project root so paths like local_models/, rag_data/, and data/ resolve correctly
 os.chdir(_project_root)
 
 try:

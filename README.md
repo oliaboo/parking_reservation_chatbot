@@ -1,6 +1,6 @@
 # Parking Reservation Chatbot
 
-Chatbot for parking information and reservations (RAG + LangGraph). Identifies users by nickname, stores reservations in SQLite, uses FAISS with content from `data/parking_info.txt`.
+Chatbot for parking information and reservations (RAG + LangGraph). Identifies users by nickname, stores reservations in SQLite, uses FAISS with content from `rag_data/parking_info.txt`.
 
 ## Setup
 
@@ -75,9 +75,9 @@ To save the report to a file:
 python run_evaluation.py -o evaluation_report.txt
 ```
 
-Use `--remove-index` to delete the FAISS index files after the run (`data/faiss_parking.index`, `data/faiss_parking_docs.json`), so the next run rebuilds the index (e.g. after changing `FAISS_METRIC` or `parking_info.txt`). See [docs/EVALUATION.md](docs/EVALUATION.md) for all options and metric definitions.
+Use `--remove-index` to delete the FAISS index files after the run (`rag_data/faiss_parking.index`, `rag_data/faiss_parking_docs.json`), so the next run rebuilds the index (e.g. after changing `FAISS_METRIC` or `parking_info.txt`). See [docs/EVALUATION.md](docs/EVALUATION.md) for all options and metric definitions.
 
-**FAISS similarity:** Set `FAISS_METRIC=cosine` (default) or `FAISS_METRIC=l2` in `.env`. After changing the metric, delete `data/faiss_parking.index` (and optionally `data/faiss_parking_docs.json`) so the index is rebuilt on next run. Details in [docs/EVALUATION.md](docs/EVALUATION.md#faiss-similarity-metric).
+**FAISS similarity:** Set `FAISS_METRIC=cosine` (default) or `FAISS_METRIC=l2` in `.env`. After changing the metric, delete `rag_data/faiss_parking.index` (and optionally `rag_data/faiss_parking_docs.json`) so the index is rebuilt on next run. Details in [docs/EVALUATION.md](docs/EVALUATION.md#faiss-similarity-metric).
 
 ## Documentation
 

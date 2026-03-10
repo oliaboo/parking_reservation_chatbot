@@ -38,7 +38,7 @@ def main():
     parser.add_argument(
         "--remove-index",
         action="store_true",
-        help="Remove FAISS index files (data/faiss_parking.index, faiss_parking_docs.json) after the run",
+        help="Remove FAISS index files (rag_data/faiss_parking.index, faiss_parking_docs.json) after the run",
     )
     args = parser.parse_args()
 
@@ -93,8 +93,8 @@ def main():
         print(f"Report written to {out_path}")
 
     if args.remove_index:
-        index_path = _root / "data" / "faiss_parking.index"
-        docs_path = _root / "data" / "faiss_parking_docs.json"
+        index_path = _root / "rag_data" / "faiss_parking.index"
+        docs_path = _root / "rag_data" / "faiss_parking_docs.json"
         for p in (index_path, docs_path):
             if p.exists():
                 p.unlink()

@@ -10,8 +10,9 @@ This document describes the project layout and how each module is used.
 parking_reservation_chatbot/
 ├── run.py                 # Entry point: nickname prompt, init, chat loop
 ├── data/
+│   └── parking.db         # SQLite DB (users, reservations, prices, working_hours, availability)
+├── rag_data/
 │   ├── parking_info.txt   # Static content for RAG (location, capacity, booking process, etc.)
-│   ├── parking.db         # SQLite DB (users, reservations, prices, working_hours, availability)
 │   ├── faiss_parking.index
 │   └── faiss_parking_docs.json
 ├── requirements.txt
@@ -107,7 +108,7 @@ parking_reservation_chatbot/
 
 ### parking_info_loader.py
 
-- **load_parking_info_chunks():** Reads `data/parking_info.txt`, splits by blank lines into paragraphs; returns list of `{content, metadata}`. Shared by FAISSStore and mock_weaviate.
+- **load_parking_info_chunks():** Reads `rag_data/parking_info.txt`, splits by blank lines into paragraphs; returns list of `{content, metadata}`. Shared by FAISSStore and mock_weaviate.
 
 ### faiss_store.py
 
