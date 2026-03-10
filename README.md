@@ -61,21 +61,23 @@ ruff check . --fix
 ruff format .
 ```
 
-## RAG evaluation (Recall@K, Precision@K, latency)
+## Evaluation report (system performance)
 
-To evaluate retrieval accuracy and performance:
+To generate an **evaluation report** on retrieval accuracy and performance (Recall@K, Precision@K, latency):
 
 ```bash
 python run_evaluation.py
 ```
 
-This runs the same vector store as the chatbot on a fixed set of queries and reports mean **Recall@1/3/5**, **Precision@1/3/5**, and **retrieval latency** (no LLM required). See [docs/EVALUATION.md](docs/EVALUATION.md) for details.
-
-Or with the venv Python explicitly:
+To save the report to a file:
 
 ```bash
-.venv/bin/python -m pytest tests/ -v
+python run_evaluation.py -o evaluation_report.txt
 ```
+
+Use `--remove-index` to delete the FAISS index files after the run (`data/faiss_parking.index`, `data/faiss_parking_docs.json`), so the next run rebuilds the index (e.g. after changing `FAISS_METRIC` or `parking_info.txt`). See [docs/EVALUATION.md](docs/EVALUATION.md) for all options and metric definitions.
+
+**FAISS similarity:** Set `FAISS_METRIC=cosine` (default) or `FAISS_METRIC=l2` in `.env`. After changing the metric, delete `data/faiss_parking.index` (and optionally `data/faiss_parking_docs.json`) so the index is rebuilt on next run. Details in [docs/EVALUATION.md](docs/EVALUATION.md#faiss-similarity-metric).
 
 ## Documentation
 

@@ -52,7 +52,8 @@ class RAGEvaluator:
     """
     Evaluate RAG retrieval: Recall@K, Precision@K, and retrieval latency.
     Uses a vector store (or RAG system) and a list of EvalItems (query + relevant_doc_ids).
-    Top-k retrieved chunks are filtered by similarity score >= 0.5 before computing metrics.
+    Top-k retrieved chunks are filtered by similarity score >= min_score_threshold
+    (default 0.4) before computing metrics.
     """
 
     def __init__(
@@ -60,16 +61,19 @@ class RAGEvaluator:
         vector_store: Any,
         eval_dataset: Optional[List[EvalItem]] = None,
         k_values: Optional[List[int]] = None,
+        min_score_threshold: float = 0.4,
     ):
         """
         Args:
             vector_store: Must have similarity_search(query, k) returning list of dicts with "id" key.
             eval_dataset: List of EvalItem; if None, uses DEFAULT_EVAL_DATASET.
-            k_values: K values for Recall@K and Precision@K (e.g. [1, 3, 5]).
+            k_values: K values for Recall@K and Precision@K (e.g. [1, 3, 5, 10]).
+            min_score_threshold: Keep only retrieved chunks with score >= this (cosine ~[-1,1]; default 0.4).
         """
         self.vector_store = vector_store
         self.eval_dataset = eval_dataset or DEFAULT_EVAL_DATASET
         self.k_values = k_values or [1, 3, 5]
+        self.min_score_threshold = min_score_threshold
 
     def run_retrieval_evaluation(self) -> EvaluationReport:
         """
@@ -77,13 +81,12 @@ class RAGEvaluator:
         Does not call the LLM.
 
         Top-k results from similarity_search are filtered: only chunks with
-        similarity score >= 0.5 are kept. Recall@K and Precision@K are computed
-        on this filtered list (order preserved).
+        similarity score >= min_score_threshold are kept. Recall@K and Precision@K
+        are computed on this filtered list (order preserved).
         """
         report = EvaluationReport(num_queries=len(self.eval_dataset))
         max_k = max(self.k_values)
         latencies_ms: List[float] = []
-        min_score_threshold = 0.5
 
         for item in self.eval_dataset:
             start = time.perf_counter()
@@ -91,11 +94,11 @@ class RAGEvaluator:
             elapsed_ms = (time.perf_counter() - start) * 1000
             latencies_ms.append(elapsed_ms)
 
-            # Filter: keep only chunks with similarity score >= 0.5 (order preserved)
+            # Filter: keep chunks with similarity score >= threshold (default 0.4)
             retrieved_ids = [
                 r.get("id", "")
                 for r in results
-                if r.get("id") and r.get("score", -1) >= min_score_threshold
+                if r.get("id") and r.get("score", -1) >= self.min_score_threshold
             ]
             relevant = list(item.relevant_doc_ids)
 
@@ -143,16 +146,31 @@ class RAGEvaluator:
         }
 
 
-def format_report(report: EvaluationReport, include_per_query: bool = False) -> str:
-    """Produce a human-readable evaluation report."""
+def format_report(
+    report: EvaluationReport,
+    include_per_query: bool = False,
+    max_per_query: int | None = 3,
+    min_score_threshold: float | None = None,
+) -> str:
+    """Produce a human-readable evaluation report.
+
+    If include_per_query is True, include per-query details. max_per_query limits how many
+    (default 3); set to None to include all. min_score_threshold can be shown in the header.
+    """
     lines = [
         "=" * 60,
         "RAG EVALUATION REPORT",
         "=" * 60,
         f"Number of queries: {report.num_queries}",
-        "",
-        "Retrieval accuracy (mean over queries):",
     ]
+    if min_score_threshold is not None:
+        lines.append(f"Min similarity score (filter): {min_score_threshold}")
+    lines.extend(
+        [
+            "",
+            "Retrieval accuracy (mean over queries):",
+        ]
+    )
     for k in sorted(report.recall_at_k.keys()):
         lines.append(f"  Recall@{k}:    {report.recall_at_k[k]:.4f}")
     for k in sorted(report.precision_at_k.keys()):
@@ -172,10 +190,14 @@ def format_report(report: EvaluationReport, include_per_query: bool = False) -> 
         ]
     )
     if include_per_query and report.details_per_query:
+        details = report.details_per_query
+        if max_per_query is not None:
+            details = details[:max_per_query]
         lines.append("")
-        lines.append("Per-query details (first 3):")
-        for d in report.details_per_query[:3]:
-            lines.append(f"  Query: {d['query'][:50]}...")
+        lines.append(f"Per-query details ({len(details)} of {len(report.details_per_query)}):")
+        for d in details:
+            query_preview = d["query"][:50] + "..." if len(d["query"]) > 50 else d["query"]
+            lines.append(f"  Query: {query_preview}")
             lines.append(f"    Retrieved IDs: {d['retrieved_ids']}, Relevant: {d['relevant_ids']}")
             for k in sorted(report.recall_at_k.keys()):
                 lines.append(

@@ -13,9 +13,11 @@ class VectorStore:
         self,
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         use_mock: bool = True,
+        faiss_metric: str = "cosine",
     ):
         self.embedding_model = embedding_model
         self.use_mock = use_mock
+        self.faiss_metric = (faiss_metric or "cosine").lower()
         self._embedding_generator = None
         self._client = None
 
@@ -29,7 +31,10 @@ class VectorStore:
     def client(self):
         if self._client is None:
             if self.use_mock:
-                self._client = FAISSStore(self.embedding_generator)
+                self._client = FAISSStore(
+                    self.embedding_generator,
+                    metric=self.faiss_metric,
+                )
             else:
                 raise NotImplementedError("Real Weaviate client not yet implemented")
         return self._client

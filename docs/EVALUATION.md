@@ -14,7 +14,7 @@ This document describes how to run **performance testing** and **response accura
 
 Evaluation uses **retrieval only** (no LLM): the same vector store and embeddings as the chatbot, with a fixed set of test queries and ground-truth relevant document IDs. This avoids LLM variability and focuses on whether the right chunks from `parking_info.txt` are retrieved.
 
-**Additional criterion:** In `run_retrieval_evaluation()`, the top-k chunks returned by similarity search are **filtered by similarity score ≥ 0.5**. Only chunks with score ≥ 0.5 are used when computing Recall@K and Precision@K (order is preserved). Chunks below the threshold are excluded from the retrieved set.
+**Additional criterion:** In `run_retrieval_evaluation()`, the top-k chunks returned by similarity search are **filtered by similarity score ≥ min_score_threshold** (default **0.4**). Only chunks at or above the threshold are used when computing Recall@K and Precision@K (order is preserved). You can pass `min_score_threshold` to `RAGEvaluator` or use `--min-score` in `run_evaluation.py` to override.
 
 ---
 
@@ -36,7 +36,7 @@ Output includes mean Recall@1, Recall@3, Recall@5, Precision@1/3/5, mean retriev
 
 - **`eval_dataset.py`** — Defines `EvalItem(query, relevant_doc_ids)` and `DEFAULT_EVAL_DATASET`: list of queries with the doc IDs (from the mock Weaviate chunk order) that should be retrieved. Chunk IDs 1, 2, 3, … correspond to the order of paragraphs/sections in `parking_info.txt`.
 - **`rag_evaluator.py`** — `RAGEvaluator(vector_store, eval_dataset, k_values)`:
-  - `run_retrieval_evaluation()` — For each eval query, runs `vector_store.similarity_search(query, k=max_k)`, then **filters** the top-k results to those with **similarity score ≥ 0.5**, measures latency, and computes Recall@K and Precision@K for each K in `k_values` (using the filtered list).
+  - `run_retrieval_evaluation()` — For each eval query, runs `vector_store.similarity_search(query, k=max_k)`, then **filters** the top-k results to those with **similarity score ≥ min_score_threshold** (default 0.4), measures latency, and computes Recall@K and Precision@K for each K in `k_values` (using the filtered list).
   - `run_performance_test(num_runs, k)` — Runs retrieval repeatedly and returns mean/min/max latency.
   - `EvaluationReport` — Holds recall_at_k, precision_at_k, retrieval_latency_ms, details_per_query.
 - **`format_report(report)`** — Returns a human-readable report string.
@@ -50,6 +50,14 @@ Output includes mean Recall@1, Recall@3, Recall@5, Precision@1/3/5, mean retriev
 
 No database or LLM is required; only the vector store (and thus the embedding model) is used.
 
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-o FILE`, `--output FILE` | Write the full report (including all per-query details) to FILE. |
+| `--min-score T` | Minimum similarity score to count a chunk (default 0.4). Only chunks with score ≥ T are used for Recall@K and Precision@K. |
+| `--remove-index` | After the run, delete the FAISS index files `data/faiss_parking.index` and `data/faiss_parking_docs.json`. Use this to force a fresh index on the next run (e.g. after changing `FAISS_METRIC` or `parking_info.txt`). |
+
 ---
 
 ## Metric definitions
@@ -60,7 +68,7 @@ No database or LLM is required; only the vector store (and thus the embedding mo
 - **Precision@K** = (number of relevant docs in top-K) / K.  
   High precision means the top-K are mostly relevant.
 
-For each eval item, “relevant” is defined by the ground-truth `relevant_doc_ids` in the dataset. Retrieved doc IDs come from the vector store’s similarity search result (`id` field), **after filtering** to keep only chunks whose similarity `score` is ≥ 0.5.
+For each eval item, “relevant” is defined by the ground-truth `relevant_doc_ids` in the dataset. Retrieved doc IDs come from the vector store’s similarity search result (`id` field), **after filtering** to keep only chunks whose similarity `score` is ≥ min_score_threshold (default 0.4).
 
 ---
 
@@ -72,6 +80,17 @@ Edit `src/evaluation/eval_dataset.py`:
 - `relevant_doc_ids` must be the string IDs of chunks (e.g. `"1"`, `"2"`, …) that the mock store assigns to `parking_info.txt` chunks in order.
 
 To see which chunk has which ID, run the mock once and inspect the order of chunks (or add a small script that loads the mock and prints chunk IDs and a short snippet).
+
+---
+
+## FAISS similarity metric
+
+The vector store uses FAISS with a configurable similarity metric (env **`FAISS_METRIC`**, default **`cosine`**):
+
+- **`cosine`** — Normalized vectors + `IndexFlatIP` (inner product = cosine similarity). Scores in [-1, 1].
+- **`l2`** — `IndexFlatL2` (squared Euclidean distance). Scores are returned as `1/(1+distance)` so higher = more similar; evaluation’s `min_score_threshold` behaves the same.
+
+**Changing the metric requires rebuilding the index:** delete `data/faiss_parking.index` (and optionally `data/faiss_parking_docs.json`), then run the chatbot or `run_evaluation.py` so the index is rebuilt with the new metric. You can also run `python run_evaluation.py --remove-index` to delete the index files after an evaluation run, so the next run rebuilds from scratch.
 
 ---
 

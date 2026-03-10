@@ -38,11 +38,19 @@ def _normalize(x: np.ndarray) -> np.ndarray:
     return x.astype(np.float32) / norms
 
 
+# FAISS metric type constants (for detecting loaded index)
+_METRIC_L2 = getattr(faiss, "METRIC_L2", 0) if faiss else 0
+_METRIC_INNER_PRODUCT = getattr(faiss, "METRIC_INNER_PRODUCT", 1) if faiss else 1
+
+
 class FAISSStore:
     """
     Vector store using FAISS. Vectors are created from parking_info.txt chunks,
     added to a FAISS index, and the index is saved to disk for future use.
     On init, loads from disk if present; otherwise builds from parking_info.txt and saves.
+
+    metric: "cosine" (IndexFlatIP + normalized vectors) or "l2" (IndexFlatL2, squared Euclidean).
+    For L2, query scores are returned as 1/(1+distance) so higher = more similar (same as cosine).
     """
 
     def __init__(
@@ -51,12 +59,14 @@ class FAISSStore:
         index_path: Optional[Path] = None,
         docs_path: Optional[Path] = None,
         force_rebuild: bool = False,
+        metric: str = "cosine",
     ):
         if not FAISS_AVAILABLE:
             raise ImportError("faiss is not installed. pip install faiss-cpu")
         self.embedding_generator = embedding_generator
         self._index_path = Path(index_path) if index_path is not None else DEFAULT_FAISS_INDEX_PATH
         self._docs_path = Path(docs_path) if docs_path is not None else DEFAULT_FAISS_DOCS_PATH
+        self._metric = "l2" if (metric or "cosine").lower() == "l2" else "cosine"
         self._index = None
         self._doc_store: List[Dict[str, Any]] = []
         self._build_or_load_index(force_rebuild=force_rebuild)
@@ -75,6 +85,9 @@ class FAISSStore:
             self._index = faiss.read_index(str(self._index_path))
             with open(self._docs_path, "r", encoding="utf-8") as f:
                 self._doc_store = json.load(f)
+            # Detect metric from loaded index so query() uses correct score semantics
+            mt = getattr(self._index, "metric_type", _METRIC_INNER_PRODUCT)
+            self._metric = "l2" if mt == _METRIC_L2 else "cosine"
             return True
         except Exception:
             return False
@@ -97,8 +110,11 @@ class FAISSStore:
         embeddings = self.embedding_generator.generate_embeddings(contents)
         dim = embeddings[0].shape[0] if hasattr(embeddings[0], "shape") else len(embeddings[0])
         vectors = np.stack([np.asarray(e, dtype=np.float32) for e in embeddings])
-        vectors = _normalize(vectors)
-        self._index = faiss.IndexFlatIP(dim)
+        if self._metric == "cosine":
+            vectors = _normalize(vectors)
+            self._index = faiss.IndexFlatIP(dim)
+        else:
+            self._index = faiss.IndexFlatL2(dim)
         self._index.add(vectors)
         self._doc_store = [
             {"id": str(i + 1), "content": contents[i], "metadata": chunks[i].get("metadata", {})}
@@ -111,28 +127,31 @@ class FAISSStore:
         limit: int = 5,
         where: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        """Return top-k documents by cosine similarity (query_vector assumed normalized)."""
+        """Return top-k documents. Cosine: higher score = more similar. L2: score = 1/(1+distance)."""
         if self._index is None or not self._doc_store:
             return []
         q = np.asarray(query_vector, dtype=np.float32)
         if q.ndim == 1:
             q = q.reshape(1, -1)
-        q = _normalize(q)
-        scores, indices = self._index.search(q, min(limit, len(self._doc_store)))
+        if self._metric == "cosine":
+            q = _normalize(q)
+        raw_scores, indices = self._index.search(q, min(limit, len(self._doc_store)))
         results = []
-        for score, idx in zip(scores[0], indices[0]):
+        for raw, idx in zip(raw_scores[0], indices[0]):
             if idx < 0:
                 continue
             doc = self._doc_store[idx]
             if where:
                 if not self._matches_filter(doc, where):
                     continue
+            # L2 returns distance (lower=better); convert to score in (0,1] so higher=better
+            score = (1.0 / (1.0 + float(raw))) if self._metric == "l2" else float(raw)
             results.append(
                 {
                     "id": doc["id"],
                     "content": doc["content"],
                     "metadata": doc["metadata"],
-                    "score": float(score),
+                    "score": score,
                 }
             )
         return results[:limit]
@@ -153,9 +172,11 @@ class FAISSStore:
         if not self._index or not FAISS_AVAILABLE:
             return []
         start = len(self._doc_store)
-        vectors = np.stack([_normalize(np.asarray(e, dtype=np.float32)) for e in embeddings])
+        vectors = np.stack([np.asarray(e, dtype=np.float32) for e in embeddings])
         if vectors.ndim == 1:
             vectors = vectors.reshape(1, -1)
+        if self._metric == "cosine":
+            vectors = _normalize(vectors)
         self._index.add(vectors)
         ids = []
         for i, doc in enumerate(documents):

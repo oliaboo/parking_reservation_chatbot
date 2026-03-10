@@ -79,7 +79,9 @@ def initialize_system(nickname: str):
     logger.info("Initializing parking reservation chatbot...")
     try:
         vector_store = VectorStore(
-            embedding_model=settings.embedding_model, use_mock=settings.use_mock_db
+            embedding_model=settings.embedding_model,
+            use_mock=settings.use_mock_db,
+            faiss_metric=settings.faiss_metric,
         )
     except ImportError as e:
         logger.error(f"Failed to initialize vector store: {e}")

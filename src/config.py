@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     weaviate_api_key: str = os.getenv("WEAVIATE_API_KEY", "")
     weaviate_class_name: str = os.getenv("WEAVIATE_CLASS_NAME", "ParkingInfo")
     use_mock_db: bool = True  # Use mock for now
+    # FAISS similarity: "cosine" (IndexFlatIP + normalized) or "l2" (IndexFlatL2, Euclidean)
+    faiss_metric: str = os.getenv("FAISS_METRIC", "cosine").lower()
 
     # Embedding Model
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")

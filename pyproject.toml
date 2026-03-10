@@ -17,3 +17,8 @@ ignore = ["E501", "E402"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = [
+    "ignore:builtin type .* has no __module__:DeprecationWarning",
+    "ignore:.*state_schema.*:UserWarning",
+    "ignore::UserWarning:langgraph.graph.state",
+]

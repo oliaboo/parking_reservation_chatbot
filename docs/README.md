@@ -9,7 +9,7 @@ This folder contains technical documentation for the parking reservation chatbot
 | [DATA_FLOW.md](DATA_FLOW.md) | End-to-end data flow: startup, chat loop, intent routing, RAG, reservations, and database usage. |
 | [CODE_STRUCTURE.md](CODE_STRUCTURE.md) | Project layout, modules, and how each component is used. |
 | [TESTING_GUARDRAILS.md](TESTING_GUARDRAILS.md) | How to test guardrails manually and automatically. |
-| [EVALUATION.md](EVALUATION.md) | RAG evaluation: Recall@K, Precision@K, retrieval latency, and how to run it. |
+| [EVALUATION.md](EVALUATION.md) | RAG evaluation: Recall@K, Precision@K, retrieval latency, FAISS metric (cosine vs L2), and how to run it. |
 
 ## Quick overview
 
