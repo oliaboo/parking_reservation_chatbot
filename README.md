@@ -46,6 +46,8 @@ Enter a valid nickname (e.g. `alice`, `bob`) when prompted, then chat: ask for i
 pytest tests/ -v
 ```
 
+Or from the project root: **`make tests`**. See the **Makefile** for shortcuts: `make run`, `make lint`, `make evaluation`, `make evaluation_report_cosine`, `make evaluation_report_l2`.
+
 ## Linting
 
 The project uses [Ruff](https://docs.astral.sh/ruff/) for linting (configured in `pyproject.toml`):

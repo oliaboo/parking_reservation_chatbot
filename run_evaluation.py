@@ -26,7 +26,7 @@ def main():
         "-o",
         "--output",
         metavar="FILE",
-        help="Write the evaluation report to FILE (e.g. evaluation_report.txt)",
+        help="Write the report to evaluation_reports/FILE (e.g. -o evaluation_report.txt)",
     )
     parser.add_argument(
         "--min-score",
@@ -81,7 +81,9 @@ def main():
     print(perf_text)
 
     if args.output:
-        out_path = Path(args.output)
+        reports_dir = _root / "evaluation_reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        out_path = reports_dir / Path(args.output).name
         # Save report with all per-query details (max_per_query=None)
         full_report_text = format_report(
             report,
