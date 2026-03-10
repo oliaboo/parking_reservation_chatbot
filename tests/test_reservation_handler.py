@@ -1,6 +1,7 @@
 """Simple tests for ReservationHandler (date-only flow, SQLite)."""
 
 import os
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -100,3 +101,32 @@ def test_handler_date_range_reservation(handler):
     assert "2025-03-11" in active
     assert "2025-03-12" in active
     assert len(active) == 3
+
+
+def test_handler_rejects_reservation_when_parking_full(handler):
+    """When a date has 0 free spaces, reservation is rejected with a clear message."""
+    with sqlite3.connect(handler.db.db_path) as conn:
+        conn.execute(
+            "UPDATE availability SET free_spaces = 0 WHERE date = ?", ("2025-03-13",)
+        )
+        conn.commit()
+    handler.start_reservation()
+    ok, msg = handler.process_user_input("2025-03-13")
+    assert ok is False
+    assert "no free spaces" in msg.lower() or "2025-03-13" in msg
+    assert "2025-03-13" not in handler.get_active_reservations()
+
+
+def test_handler_rejects_range_when_any_day_full(handler):
+    """When any day in a range has 0 free spaces, the whole reservation is rejected."""
+    with sqlite3.connect(handler.db.db_path) as conn:
+        conn.execute(
+            "UPDATE availability SET free_spaces = 0 WHERE date = ?", ("2025-03-11",)
+        )
+        conn.commit()
+    handler.start_reservation()
+    ok, msg = handler.process_user_input("2025-03-10 - 2025-03-12")
+    assert ok is False
+    assert "no free spaces" in msg.lower()
+    assert "2025-03-11" in msg
+    assert "2025-03-10" not in handler.get_active_reservations()

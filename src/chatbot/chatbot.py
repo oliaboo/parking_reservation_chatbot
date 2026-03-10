@@ -40,11 +40,7 @@ class ParkingChatbot:
         try:
             response = self.rag_system.generate_response(user_input)
         except ValueError as e:
-            response = (
-                str(e)
-                if "sensitive" not in str(e).lower()
-                else "For reservations say 'I want to make a reservation' or 'book a parking space'."
-            )
+            response = str(e)
         except Exception as e:
             response = f"I apologize, but I encountered an error: {str(e)}"
         messages.append(AIMessage(content=response))
@@ -57,6 +53,17 @@ class ParkingChatbot:
             return state
         last_message = messages[-1]
         user_input = last_message.content if hasattr(last_message, "content") else str(last_message)
+
+        # Guard rails: block sensitive data (email, SSN, card, phone) before any LLM/RAG call
+        is_safe, error_msg = self.rag_system.guard_rails.validate_query(
+            user_input, allow_reservation_data=False
+        )
+        if not is_safe:
+            messages.append(
+                AIMessage(content=error_msg or "Query contains potentially sensitive information. Please rephrase.")
+            )
+            state["messages"] = messages
+            return state
 
         # If we're already collecting a reservation, allow other actions unless they're giving a date
         if self.reservation_handler.get_current_reservation() is not None:

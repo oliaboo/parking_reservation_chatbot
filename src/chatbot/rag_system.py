@@ -1,5 +1,6 @@
 """RAG system implementation using LangChain"""
 
+from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from langchain_core.documents import Document
@@ -88,11 +89,22 @@ Answer:""",
         return self.guard_rails.filter_retrieved_documents(documents)
 
     def _get_dynamic_context(self) -> str:
-        """Get current prices and working hours from SQLite to include in RAG context."""
+        """Get current prices, working hours, and availability from SQLite to include in RAG context."""
         if not self.db:
             return ""
         parts = []
         try:
+            today = date.today()
+            parts.append(f"Today's date: {today.isoformat()}.")
+            availability_lines = []
+            for i in range(7):
+                d = (today + timedelta(days=i)).isoformat()
+                free = self.db.get_free_spaces(d)
+                if free is not None:
+                    label = "today" if i == 0 else ("tomorrow" if i == 1 else d)
+                    availability_lines.append(f"  - {label}: {free} spaces available")
+            if availability_lines:
+                parts.append("Available parking spaces (from database):\n" + "\n".join(availability_lines))
             prices = self.db.get_prices()
             if prices:
                 lines = []

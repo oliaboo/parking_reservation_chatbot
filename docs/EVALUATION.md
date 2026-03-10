@@ -8,9 +8,9 @@ This document describes how to run **performance testing** and **response accura
 
 | Metric | Description |
 |--------|-------------|
-| **Recall@K** | Of all relevant documents for a query, what fraction appear in the top-K retrieved? Mean over eval queries. |
-| **Precision@K** | Of the top-K retrieved documents, what fraction are relevant? Mean over eval queries. |
-| **Retrieval latency** | Time (ms) to run one similarity search (embed query + vector search). Mean, min, max over queries or over repeated runs. |
+| **Recall@K** | **Completeness:** Of all documents that *should* be retrieved for a query (ground truth), what fraction actually appear in the top-K results? Formula: (relevant docs in top-K) / (total relevant docs). High recall = we rarely miss relevant chunks. Reported as mean over all eval queries. |
+| **Precision@K** | **Relevance of the list:** Of the top-K documents we *did* retrieve, what fraction are actually relevant? Formula: (relevant docs in top-K) / K. High precision = the top-K list is mostly on-topic, little noise. Reported as mean over all eval queries. |
+| **Retrieval latency** | **Speed:** Time in milliseconds to run one similarity search (embed the query + FAISS search). Reported as mean, min, and max over the eval queries, plus an optional 5-run performance test for a single query. |
 
 Evaluation uses **retrieval only** (no LLM): the same vector store and embeddings as the chatbot, with a fixed set of test queries and ground-truth relevant document IDs. This avoids LLM variability and focuses on whether the right chunks from `parking_info.txt` are retrieved.
 

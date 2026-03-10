@@ -1,19 +1,21 @@
 """Simple tests for chatbot-related behavior (show reservations, intent keywords, reservation-in-progress escape)."""
 
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import os
 import tempfile
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from src.chatbot.chatbot import ParkingChatbot
 from src.chatbot.reservation_handler import ReservationHandler
 from src.db.sqlite_db import SQLiteDB
+from src.guardrails.guard_rails import GuardRails
 
 
 @pytest.fixture
@@ -53,6 +55,7 @@ def test_chat_show_my_reservations_invokes_show_reservations_handler(temp_db):
     handler = ReservationHandler(db=temp_db)
     handler.set_nickname("alice")
     mock_rag = MagicMock()
+    mock_rag.guard_rails.validate_query = MagicMock(return_value=(True, None))
     mock_rag.classify_intent = MagicMock(return_value="show_reservations")
     mock_rag.generate_response = MagicMock(return_value="RAG would say this")
     chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
@@ -67,12 +70,43 @@ def test_chat_general_questions_go_to_rag_not_reservation(temp_db):
     handler = ReservationHandler(db=temp_db)
     handler.set_nickname("alice")
     mock_rag = MagicMock()
+    mock_rag.guard_rails.validate_query = MagicMock(return_value=(True, None))
     mock_rag.classify_intent = MagicMock(return_value="general")
     mock_rag.generate_response = MagicMock(return_value="Our reservation policy is flexible.")
     chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
     response = chatbot.chat("What is your reservation policy?")
     mock_rag.generate_response.assert_called_once()
     assert "reservation policy" in response.lower() or "flexible" in response.lower()
+
+
+def test_chat_blocks_email_in_query(temp_db):
+    """Query containing email should be blocked by guard rails before RAG/LLM; user sees sensitive-data message."""
+    handler = ReservationHandler(db=temp_db)
+    handler.set_nickname("alice")
+    mock_rag = MagicMock()
+    mock_rag.guard_rails.validate_query = MagicMock(
+        return_value=(False, "Query contains potentially sensitive information. Please rephrase.")
+    )
+    chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
+    response = chatbot.chat("Contact me at john.doe@email.com for the receipt")
+    assert "sensitive" in response.lower() or "rephrase" in response.lower()
+    mock_rag.classify_intent.assert_not_called()
+    mock_rag.generate_response.assert_not_called()
+
+
+def test_chat_blocks_email_with_real_guard_rails(temp_db):
+    """With real GuardRails, query containing john.doe@email.com is blocked and RAG is never called."""
+    handler = ReservationHandler(db=temp_db)
+    handler.set_nickname("alice")
+    guard_rails = GuardRails(enabled=True, threshold=0.7)
+    mock_rag = MagicMock()
+    mock_rag.guard_rails = guard_rails
+    mock_rag.classify_intent = MagicMock(return_value="general")
+    mock_rag.generate_response = MagicMock(return_value="Parking info here")
+    chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
+    response = chatbot.chat("Contact me at john.doe@email.com for the receipt")
+    assert "sensitive" in response.lower() or "rephrase" in response.lower()
+    mock_rag.generate_response.assert_not_called()
 
 
 def test_chat_booking_intent_goes_to_reservation(temp_db):
@@ -160,3 +194,24 @@ def test_reservation_in_progress_general_clears_and_answers_rag(temp_db):
     assert "9" in r2 or "5" in r2 or "open" in r2.lower()
     assert handler.get_current_reservation() is None
     assert mock_rag.generate_response.call_count == 1
+
+
+def test_rag_dynamic_context_includes_availability_for_tomorrow(temp_db):
+    """RAG dynamic context includes today's date and availability so questions like 'how many for tomorrow?' can be answered."""
+    from src.chatbot.rag_system import RAGSystem
+
+    mock_store = MagicMock()
+    mock_store.similarity_search = MagicMock(return_value=[])
+    mock_llm = MagicMock()
+    mock_rag = RAGSystem(
+        vector_store=mock_store,
+        llm_provider=MagicMock(get_llm=MagicMock(return_value=mock_llm)),
+        guard_rails=MagicMock(validate_query=MagicMock(return_value=(True, None))),
+        db=temp_db,
+    )
+    with patch("src.chatbot.rag_system.date") as mock_date:
+        mock_date.today.return_value = date(2025, 3, 10)
+        ctx = mock_rag._get_dynamic_context()
+    assert "Today's date: 2025-03-10" in ctx
+    assert "tomorrow" in ctx
+    assert "spaces available" in ctx
