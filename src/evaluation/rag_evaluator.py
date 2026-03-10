@@ -5,19 +5,21 @@ Additional criterion: after retrieving top-k chunks, results are filtered by sim
 score >= 0.5. Only chunks passing this threshold are used when computing Recall@K and
 Precision@K. This filter is applied in run_retrieval_evaluation().
 """
+
 import time
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 try:
-    from .eval_dataset import EvalItem, DEFAULT_EVAL_DATASET
+    from .eval_dataset import DEFAULT_EVAL_DATASET, EvalItem
 except ImportError:
-    from src.evaluation.eval_dataset import EvalItem, DEFAULT_EVAL_DATASET
+    from src.evaluation.eval_dataset import DEFAULT_EVAL_DATASET, EvalItem
 
 
 @dataclass
 class EvaluationReport:
     """Results of RAG evaluation."""
+
     recall_at_k: Dict[int, float] = field(default_factory=dict)  # K -> mean Recall@K
     precision_at_k: Dict[int, float] = field(default_factory=dict)
     retrieval_latency_ms: float = 0.0
@@ -112,8 +114,12 @@ class RAGEvaluator:
         report.retrieval_latency_ms = sum(latencies_ms) / len(latencies_ms) if latencies_ms else 0
 
         for k in self.k_values:
-            report.recall_at_k[k] = sum(d[f"recall@{k}"] for d in report.details_per_query) / len(report.details_per_query)
-            report.precision_at_k[k] = sum(d[f"precision@{k}"] for d in report.details_per_query) / len(report.details_per_query)
+            report.recall_at_k[k] = sum(d[f"recall@{k}"] for d in report.details_per_query) / len(
+                report.details_per_query
+            )
+            report.precision_at_k[k] = sum(
+                d[f"precision@{k}"] for d in report.details_per_query
+            ) / len(report.details_per_query)
 
         return report
 
@@ -151,14 +157,20 @@ def format_report(report: EvaluationReport, include_per_query: bool = False) -> 
         lines.append(f"  Recall@{k}:    {report.recall_at_k[k]:.4f}")
     for k in sorted(report.precision_at_k.keys()):
         lines.append(f"  Precision@{k}: {report.precision_at_k[k]:.4f}")
-    lines.extend([
-        "",
-        "Performance:",
-        f"  Mean retrieval latency: {report.retrieval_latency_ms:.2f} ms",
-        f"  Min latency: {min(report.retrieval_latencies_ms):.2f} ms" if report.retrieval_latencies_ms else "",
-        f"  Max latency: {max(report.retrieval_latencies_ms):.2f} ms" if report.retrieval_latencies_ms else "",
-        "=" * 60,
-    ])
+    lines.extend(
+        [
+            "",
+            "Performance:",
+            f"  Mean retrieval latency: {report.retrieval_latency_ms:.2f} ms",
+            f"  Min latency: {min(report.retrieval_latencies_ms):.2f} ms"
+            if report.retrieval_latencies_ms
+            else "",
+            f"  Max latency: {max(report.retrieval_latencies_ms):.2f} ms"
+            if report.retrieval_latencies_ms
+            else "",
+            "=" * 60,
+        ]
+    )
     if include_per_query and report.details_per_query:
         lines.append("")
         lines.append("Per-query details (first 3):")
@@ -166,5 +178,7 @@ def format_report(report: EvaluationReport, include_per_query: bool = False) -> 
             lines.append(f"  Query: {d['query'][:50]}...")
             lines.append(f"    Retrieved IDs: {d['retrieved_ids']}, Relevant: {d['relevant_ids']}")
             for k in sorted(report.recall_at_k.keys()):
-                lines.append(f"    Recall@{k}={d[f'recall@{k}']:.2f}, Precision@{k}={d[f'precision@{k}']:.2f}")
+                lines.append(
+                    f"    Recall@{k}={d[f'recall@{k}']:.2f}, Precision@{k}={d[f'precision@{k}']:.2f}"
+                )
     return "\n".join(lines)

@@ -1,6 +1,7 @@
 """Vector store interface for RAG system. Uses FAISS over parking_info.txt by default."""
-from typing import List, Dict, Any, Optional
-import numpy as np
+
+from typing import Any, Dict, List, Optional
+
 from .embeddings import EmbeddingGenerator
 from .faiss_store import FAISSStore
 
@@ -34,31 +35,21 @@ class VectorStore:
         return self._client
 
     def add_documents(
-        self,
-        texts: List[str],
-        metadatas: Optional[List[Dict[str, Any]]] = None
+        self, texts: List[str], metadatas: Optional[List[Dict[str, Any]]] = None
     ) -> List[str]:
         if metadatas is None:
             metadatas = [{}] * len(texts)
         embeddings = self.embedding_generator.generate_embeddings(texts)
         documents = [
-            {"content": text, "metadata": metadata}
-            for text, metadata in zip(texts, metadatas)
+            {"content": text, "metadata": metadata} for text, metadata in zip(texts, metadatas)
         ]
         return self.client.add_documents(documents, embeddings)
 
     def similarity_search(
-        self,
-        query: str,
-        k: int = 5,
-        filter: Optional[Dict[str, Any]] = None
+        self, query: str, k: int = 5, filter: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         query_embedding = self.embedding_generator.generate_embedding(query)
-        return self.client.query(
-            query_vector=query_embedding,
-            limit=k,
-            where=filter
-        )
+        return self.client.query(query_vector=query_embedding, limit=k, where=filter)
 
     def get_relevant_context(self, query: str, k: int = 5) -> str:
         results = self.similarity_search(query, k=k)

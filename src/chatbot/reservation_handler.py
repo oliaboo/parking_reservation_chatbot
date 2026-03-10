@@ -1,7 +1,9 @@
 """Reservation handling: collect preferred date or date range, check availability, save to SQLite."""
-from typing import Dict, Optional, List, Tuple
-from datetime import datetime, timedelta
+
 import re
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+
 from ..db.sqlite_db import SQLiteDB
 
 
@@ -21,11 +23,7 @@ def _parse_date_range(value: str) -> Optional[Tuple[str, str]]:
     """Parse 'YYYY-MM-DD - YYYY-MM-DD' or 'YYYY-MM-DD to YYYY-MM-DD'; return (start, end) or None."""
     value = value.strip()
     # Match two dates separated by " - " or " to " (with optional spaces)
-    match = re.match(
-        r"(\d{4}-\d{2}-\d{2})\s*[-–to]+\s*(\d{4}-\d{2}-\d{2})",
-        value,
-        re.IGNORECASE
-    )
+    match = re.match(r"(\d{4}-\d{2}-\d{2})\s*[-–to]+\s*(\d{4}-\d{2}-\d{2})", value, re.IGNORECASE)
     if not match:
         return None
     start_s, end_s = match.group(1), match.group(2)
@@ -83,7 +81,12 @@ class ReservationState:
         return []
 
     def to_dict(self) -> Dict:
-        return {"date": self.date, "start_date": self.start_date, "end_date": self.end_date, "is_complete": self.is_complete}
+        return {
+            "date": self.date,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "is_complete": self.is_complete,
+        }
 
     def reset(self):
         self.date = None
@@ -134,7 +137,11 @@ class ReservationHandler:
         if not current_field:
             if self.current_reservation.is_complete:
                 return True, "Reservation already complete."
-            return False, self.get_next_field_prompt() or "Provide date (YYYY-MM-DD) or range (YYYY-MM-DD - YYYY-MM-DD)."
+            return (
+                False,
+                self.get_next_field_prompt()
+                or "Provide date (YYYY-MM-DD) or range (YYYY-MM-DD - YYYY-MM-DD).",
+            )
         value = user_input.strip()
         # Try range first (e.g. 2025-03-10 - 2025-03-15)
         if _parse_date_range(value):
@@ -156,7 +163,10 @@ class ReservationHandler:
         if not dates_to_reserve:
             self.current_reservation.reset()
             self.current_field_index = 0
-            return False, "Could not parse date or range. Use YYYY-MM-DD or YYYY-MM-DD - YYYY-MM-DD."
+            return (
+                False,
+                "Could not parse date or range. Use YYYY-MM-DD or YYYY-MM-DD - YYYY-MM-DD.",
+            )
         # Check availability for all dates first
         no_space_dates = []
         for d in dates_to_reserve:
@@ -176,7 +186,10 @@ class ReservationHandler:
         if added_count == len(dates_to_reserve):
             if len(dates_to_reserve) == 1:
                 return True, f"Reservation saved for {dates_to_reserve[0]}. You're all set!"
-            return True, f"Reservations saved for {dates_to_reserve[0]} to {dates_to_reserve[-1]} ({added_count} days). You're all set!"
+            return (
+                True,
+                f"Reservations saved for {dates_to_reserve[0]} to {dates_to_reserve[-1]} ({added_count} days). You're all set!",
+            )
         return False, "Could not save some reservations. Please try again."
 
     def get_current_reservation(self) -> Optional[ReservationState]:

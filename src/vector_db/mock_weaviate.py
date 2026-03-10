@@ -1,6 +1,7 @@
 """Mock Weaviate vector database implementation (for tests / fallback)."""
 
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 
 from .parking_info_loader import load_parking_info_chunks
@@ -29,11 +30,13 @@ class MockWeaviateClient:
         for i, ch in enumerate(raw_chunks, 1):
             content = ch["content"] if isinstance(ch["content"], str) else str(ch)
             contents.append(content)
-            sample_data.append({
-                "id": str(i),
-                "content": content,
-                "metadata": ch.get("metadata", {}),
-            })
+            sample_data.append(
+                {
+                    "id": str(i),
+                    "content": content,
+                    "metadata": ch.get("metadata", {}),
+                }
+            )
         self.data[self.class_name] = sample_data
         if self._embedding_generator is not None:
             try:
@@ -48,27 +51,24 @@ class MockWeaviateClient:
             dim = 384
             for item in sample_data:
                 self.embeddings[item["id"]] = np.random.rand(dim).astype(np.float32)
-    
+
     def query(
-        self,
-        query_vector: np.ndarray,
-        limit: int = 5,
-        where: Optional[Dict[str, Any]] = None
+        self, query_vector: np.ndarray, limit: int = 5, where: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
         Query the mock database using vector similarity
-        
+
         Args:
             query_vector: Query embedding vector
             limit: Maximum number of results to return
             where: Optional filter conditions
-            
+
         Returns:
             List of matching documents with scores
         """
         if self.class_name not in self.data:
             return []
-        
+
         results = []
         for item in self.data[self.class_name]:
             # Calculate cosine similarity
@@ -76,23 +76,25 @@ class MockWeaviateClient:
             similarity = np.dot(query_vector, doc_embedding) / (
                 np.linalg.norm(query_vector) * np.linalg.norm(doc_embedding) + 1e-8
             )
-            
+
             # Apply filters if provided
             if where:
                 if not self._matches_filter(item, where):
                     continue
-            
-            results.append({
-                "content": item["content"],
-                "metadata": item["metadata"],
-                "score": float(similarity),
-                "id": item["id"]
-            })
-        
+
+            results.append(
+                {
+                    "content": item["content"],
+                    "metadata": item["metadata"],
+                    "score": float(similarity),
+                    "id": item["id"],
+                }
+            )
+
         # Sort by similarity score (descending) and return top K
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:limit]
-    
+
     def _matches_filter(self, item: Dict[str, Any], where: Dict[str, Any]) -> bool:
         """Check if item matches the filter conditions"""
         for key, value in where.items():
@@ -100,25 +102,23 @@ class MockWeaviateClient:
                 if item["metadata"][key] != value:
                     return False
         return True
-    
+
     def add_documents(
-        self,
-        documents: List[Dict[str, Any]],
-        embeddings: List[np.ndarray]
+        self, documents: List[Dict[str, Any]], embeddings: List[np.ndarray]
     ) -> List[str]:
         """
         Add documents to the mock database
-        
+
         Args:
             documents: List of documents with content and metadata
             embeddings: List of embedding vectors
-            
+
         Returns:
             List of document IDs
         """
         if self.class_name not in self.data:
             self.data[self.class_name] = []
-        
+
         ids = []
         for i, (doc, embedding) in enumerate(zip(documents, embeddings)):
             doc_id = str(len(self.data[self.class_name]) + 1)
@@ -126,22 +126,18 @@ class MockWeaviateClient:
             self.data[self.class_name].append(doc)
             self.embeddings[doc_id] = embedding
             ids.append(doc_id)
-        
+
         return ids
-    
+
     def delete_all(self):
         """Delete all documents from the database"""
         self.data[self.class_name] = []
         self.embeddings = {}
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics"""
         count = len(self.data.get(self.class_name, []))
-        return {
-            "total_documents": count,
-            "class_name": self.class_name,
-            "embedding_dimension": 384
-        }
+        return {"total_documents": count, "class_name": self.class_name, "embedding_dimension": 384}
 
 
 def get_mock_client(embedding_generator: Optional[Any] = None) -> MockWeaviateClient:

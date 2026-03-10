@@ -1,11 +1,14 @@
 """Simple tests for SQLite DB (users, reservations, availability)."""
+
 import os
-import tempfile
-import pytest
 
 # Ensure project root is on path
 import sys
+import tempfile
 from pathlib import Path
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.db.sqlite_db import SQLiteDB

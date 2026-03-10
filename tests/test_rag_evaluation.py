@@ -1,21 +1,23 @@
 """Tests for RAG evaluation (Recall@K, Precision@K)."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
+from src.evaluation.eval_dataset import DEFAULT_EVAL_DATASET, EvalItem
 from src.evaluation.rag_evaluator import (
-    RAGEvaluator,
     EvaluationReport,
-    format_report,
-    _recall_at_k,
+    RAGEvaluator,
     _precision_at_k,
+    _recall_at_k,
+    format_report,
 )
-from src.evaluation.eval_dataset import EvalItem, DEFAULT_EVAL_DATASET
 
 
 class MockVectorStore:
     """Returns fixed doc IDs in order for any query (for testing metrics)."""
+
     def __init__(self, results_per_query=None):
         # results_per_query: list of list of doc IDs, one per eval item in order
         self.results_per_query = results_per_query or []
@@ -23,7 +25,11 @@ class MockVectorStore:
     def similarity_search(self, query: str, k: int = 5, filter=None):
         # Return next pre-set result or default [1,2,3,4,5]
         if self.results_per_query:
-            ids = self.results_per_query.pop(0) if self.results_per_query else ["1", "2", "3", "4", "5"]
+            ids = (
+                self.results_per_query.pop(0)
+                if self.results_per_query
+                else ["1", "2", "3", "4", "5"]
+            )
         else:
             ids = ["1", "2", "3", "4", "5"]
         return [{"id": i, "content": f"doc {i}", "score": 1.0} for i in ids[:k]]

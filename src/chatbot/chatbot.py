@@ -1,9 +1,12 @@
 """Main chatbot implementation using LangGraph"""
-from typing import Dict, Any, Optional, List
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage, AIMessage
+
+from typing import Any, Dict, List, Optional
+
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.graph import END, StateGraph
+
 from .rag_system import RAGSystem
-from .reservation_handler import ReservationHandler, ReservationState
+from .reservation_handler import ReservationHandler
 
 
 class ParkingChatbot:
@@ -22,7 +25,11 @@ class ParkingChatbot:
         workflow.add_conditional_edges(
             "classify_intent",
             self._route_intent,
-            {"general": "handle_general_query", "reservation": "handle_reservation", "show_reservations": "handle_show_reservations"},
+            {
+                "general": "handle_general_query",
+                "reservation": "handle_reservation",
+                "show_reservations": "handle_show_reservations",
+            },
         )
         workflow.add_edge("handle_general_query", END)
         workflow.add_edge("handle_reservation", END)
@@ -36,12 +43,29 @@ class ParkingChatbot:
         last_message = messages[-1]
         user_input = last_message.content if hasattr(last_message, "content") else str(last_message)
         user_input_lower = user_input.lower()
-        show_keywords = ["show my reservations", "my reservations", "active reservations", "list my reservations", "show reservations"]
+        show_keywords = [
+            "show my reservations",
+            "my reservations",
+            "active reservations",
+            "list my reservations",
+            "show reservations",
+        ]
         if any(phrase in user_input_lower for phrase in show_keywords):
             state["intent"] = "show_reservations"
             return state
-        reservation_keywords = ["reserve", "reservation", "book", "booking", "parking spot", "parking space", "date", "preferred date"]
-        state["intent"] = "reservation" if any(k in user_input_lower for k in reservation_keywords) else "general"
+        reservation_keywords = [
+            "reserve",
+            "reservation",
+            "book",
+            "booking",
+            "parking spot",
+            "parking space",
+            "date",
+            "preferred date",
+        ]
+        state["intent"] = (
+            "reservation" if any(k in user_input_lower for k in reservation_keywords) else "general"
+        )
         return state
 
     def _route_intent(self, state: Dict[str, Any]) -> str:
@@ -56,12 +80,28 @@ class ParkingChatbot:
         # If we're already collecting a reservation (e.g. waiting for date), treat this message as reservation input
         if self.reservation_handler.get_current_reservation() is not None:
             return self._handle_reservation(state)
-        if any(k in user_input.lower() for k in ["reserve", "reservation", "book", "booking", "name", "surname", "car number", "license plate"]):
+        if any(
+            k in user_input.lower()
+            for k in [
+                "reserve",
+                "reservation",
+                "book",
+                "booking",
+                "name",
+                "surname",
+                "car number",
+                "license plate",
+            ]
+        ):
             return self._handle_reservation(state)
         try:
             response = self.rag_system.generate_response(user_input)
         except ValueError as e:
-            response = str(e) if "sensitive" not in str(e).lower() else "For reservations say 'I want to make a reservation' or 'book a parking space'."
+            response = (
+                str(e)
+                if "sensitive" not in str(e).lower()
+                else "For reservations say 'I want to make a reservation' or 'book a parking space'."
+            )
         except Exception as e:
             response = f"I apologize, but I encountered an error: {str(e)}"
         messages.append(AIMessage(content=response))
@@ -71,7 +111,11 @@ class ParkingChatbot:
     def _handle_show_reservations(self, state: Dict[str, Any]) -> Dict[str, Any]:
         messages = state.get("messages", [])
         dates = self.reservation_handler.get_active_reservations()
-        response = "Your active reservations:\n" + "\n".join(f"- {d}" for d in dates) if dates else "You have no active reservations."
+        response = (
+            "Your active reservations:\n" + "\n".join(f"- {d}" for d in dates)
+            if dates
+            else "You have no active reservations."
+        )
         messages.append(AIMessage(content=response))
         state["messages"] = messages
         return state
@@ -82,9 +126,15 @@ class ParkingChatbot:
             return state
         last_message = messages[-1]
         user_input = last_message.content if hasattr(last_message, "content") else str(last_message)
-        is_safe, error_msg = self.rag_system.guard_rails.validate_query(user_input, allow_reservation_data=True)
+        is_safe, error_msg = self.rag_system.guard_rails.validate_query(
+            user_input, allow_reservation_data=True
+        )
         if not is_safe:
-            messages.append(AIMessage(content=error_msg or "Please provide only your preferred date (YYYY-MM-DD)."))
+            messages.append(
+                AIMessage(
+                    content=error_msg or "Please provide only your preferred date (YYYY-MM-DD)."
+                )
+            )
             state["messages"] = messages
             return state
         if not self.reservation_handler.get_current_reservation():

@@ -1,18 +1,20 @@
 """Simple tests for ReservationHandler (date-only flow, SQLite)."""
+
 import os
-import tempfile
 import sys
+import tempfile
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest
-from src.db.sqlite_db import SQLiteDB
 from src.chatbot.reservation_handler import (
     ReservationHandler,
     ReservationState,
-    _parse_date_range,
     _date_range_to_list,
+    _parse_date_range,
 )
+from src.db.sqlite_db import SQLiteDB
 
 
 @pytest.fixture
@@ -79,7 +81,11 @@ def test_parse_date_range():
 
 def test_date_range_to_list():
     """Date range expands to list of days inclusive."""
-    assert _date_range_to_list("2025-03-10", "2025-03-12") == ["2025-03-10", "2025-03-11", "2025-03-12"]
+    assert _date_range_to_list("2025-03-10", "2025-03-12") == [
+        "2025-03-10",
+        "2025-03-11",
+        "2025-03-12",
+    ]
     assert _date_range_to_list("2025-03-10", "2025-03-10") == ["2025-03-10"]
 
 

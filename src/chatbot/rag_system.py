@@ -1,21 +1,25 @@
 """RAG system implementation using LangChain"""
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
-from langchain_core.prompts import PromptTemplate
+
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from langchain_core.documents import Document
+from langchain_core.prompts import PromptTemplate
 
 try:
     from langchain.chains.question_answering import load_qa_chain
+
     LOAD_QA_CHAIN_AVAILABLE = True
 except ImportError:
     try:
         from langchain.chains import load_qa_chain
+
         LOAD_QA_CHAIN_AVAILABLE = True
     except ImportError:
         LOAD_QA_CHAIN_AVAILABLE = False
         load_qa_chain = None
 
-from ..vector_db.vector_store import VectorStore
 from ..guardrails.guard_rails import GuardRails
+from ..vector_db.vector_store import VectorStore
 from .llm_setup import LLMProvider
 
 if TYPE_CHECKING:
@@ -46,14 +50,12 @@ Context:
 
 Question: {question}
 
-Answer:"""
+Answer:""",
         )
         if LOAD_QA_CHAIN_AVAILABLE and load_qa_chain is not None:
             try:
                 self.qa_chain = load_qa_chain(
-                    llm=llm_provider.get_llm(),
-                    chain_type="stuff",
-                    prompt=self.prompt_template
+                    llm=llm_provider.get_llm(), chain_type="stuff", prompt=self.prompt_template
                 )
                 self._use_llm_chain = False
             except Exception:
@@ -71,14 +73,15 @@ Answer:"""
                     self._use_simple_chain = True
                     self.llm = llm_provider.get_llm()
                     return
-            if not hasattr(self, '_use_simple_chain'):
-                self.qa_chain = LLMChain(
-                    llm=llm_provider.get_llm(),
-                    prompt=self.prompt_template
-                )
+            if not hasattr(self, "_use_simple_chain"):
+                self.qa_chain = LLMChain(llm=llm_provider.get_llm(), prompt=self.prompt_template)
 
-    def retrieve_context(self, query: str, allow_reservation_data: bool = False) -> List[Dict[str, Any]]:
-        is_safe, error_msg = self.guard_rails.validate_query(query, allow_reservation_data=allow_reservation_data)
+    def retrieve_context(
+        self, query: str, allow_reservation_data: bool = False
+    ) -> List[Dict[str, Any]]:
+        is_safe, error_msg = self.guard_rails.validate_query(
+            query, allow_reservation_data=allow_reservation_data
+        )
         if not is_safe:
             raise ValueError(error_msg)
         documents = self.vector_store.similarity_search(query, k=self.k)
@@ -119,11 +122,11 @@ Answer:"""
         if dynamic:
             context_text = (context_text + "\n\n" + dynamic) if context_text else dynamic
             langchain_docs = langchain_docs + [Document(page_content=dynamic, metadata={})]
-        if hasattr(self, '_use_simple_chain') and self._use_simple_chain:
+        if hasattr(self, "_use_simple_chain") and self._use_simple_chain:
             formatted_prompt = self.prompt_template.format(context=context_text, question=query)
             result = self.llm.invoke(formatted_prompt)
-            result = result.content if hasattr(result, 'content') else result
-        elif hasattr(self, '_use_llm_chain') and self._use_llm_chain:
+            result = result.content if hasattr(result, "content") else result
+        elif hasattr(self, "_use_llm_chain") and self._use_llm_chain:
             result = self.qa_chain.run(context=context_text, question=query)
         else:
             result = self.qa_chain.run(input_documents=langchain_docs, question=query)

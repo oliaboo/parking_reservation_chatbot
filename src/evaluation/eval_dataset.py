@@ -3,13 +3,15 @@ Evaluation dataset for RAG retrieval.
 Each item: query + set of relevant document IDs (from mock Weaviate, 1-based string IDs).
 Chunks from parking_info.txt correspond to doc IDs 1, 2, 3, ... (by paragraph/section order).
 """
-from typing import List
+
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
 class EvalItem:
     """Single evaluation item: a query and the doc IDs that are relevant answers."""
+
     query: str
     relevant_doc_ids: List[str]
 

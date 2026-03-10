@@ -2,9 +2,11 @@
 FAISS-backed vector store for RAG. Builds vectors from parking_info.txt, adds them
 to a FAISS index, and saves the index to disk for reuse.
 """
+
 import json
 from pathlib import Path
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 import numpy as np
 
 if TYPE_CHECKING:
@@ -14,6 +16,7 @@ from .parking_info_loader import load_parking_info_chunks
 
 try:
     import faiss
+
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
@@ -32,7 +35,7 @@ def _normalize(x: np.ndarray) -> np.ndarray:
         return (x.astype(np.float32) / norm) if norm >= 1e-8 else x.astype(np.float32)
     norms = np.linalg.norm(x, axis=1, keepdims=True)
     norms = np.where(norms < 1e-8, 1.0, norms)
-    return (x.astype(np.float32) / norms)
+    return x.astype(np.float32) / norms
 
 
 class FAISSStore:
@@ -124,12 +127,14 @@ class FAISSStore:
             if where:
                 if not self._matches_filter(doc, where):
                     continue
-            results.append({
-                "id": doc["id"],
-                "content": doc["content"],
-                "metadata": doc["metadata"],
-                "score": float(score),
-            })
+            results.append(
+                {
+                    "id": doc["id"],
+                    "content": doc["content"],
+                    "metadata": doc["metadata"],
+                    "score": float(score),
+                }
+            )
         return results[:limit]
 
     def _matches_filter(self, doc: Dict[str, Any], where: Dict[str, Any]) -> bool:
@@ -155,13 +160,14 @@ class FAISSStore:
         ids = []
         for i, doc in enumerate(documents):
             doc_id = str(start + i + 1)
-            self._doc_store.append({
-                "id": doc_id,
-                "content": doc.get("content", ""),
-                "metadata": doc.get("metadata", {}),
-            })
+            self._doc_store.append(
+                {
+                    "id": doc_id,
+                    "content": doc.get("content", ""),
+                    "metadata": doc.get("metadata", {}),
+                }
+            )
             ids.append(doc_id)
         if save_to_disk:
             self._save_to_disk()
         return ids
-

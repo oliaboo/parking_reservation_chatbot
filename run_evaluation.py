@@ -3,6 +3,7 @@ Run RAG evaluation: retrieval accuracy (Recall@K, Precision@K) and performance (
 Uses the same vector store as the chatbot (parking_info.txt, sentence-transformers).
 No LLM or DB required for retrieval-only evaluation.
 """
+
 import sys
 from pathlib import Path
 
@@ -12,8 +13,8 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
 from src.config import settings
-from src.vector_db.vector_store import VectorStore
 from src.evaluation.rag_evaluator import RAGEvaluator, format_report
+from src.vector_db.vector_store import VectorStore
 
 
 def main():
@@ -39,7 +40,9 @@ def main():
     # Performance test (repeated runs)
     print("\nPerformance test (5 runs, single query):")
     perf = evaluator.run_performance_test(num_runs=5, k=5)
-    print(f"  Mean: {perf['mean_ms']:.2f} ms  Min: {perf['min_ms']:.2f} ms  Max: {perf['max_ms']:.2f} ms")
+    print(
+        f"  Mean: {perf['mean_ms']:.2f} ms  Min: {perf['min_ms']:.2f} ms  Max: {perf['max_ms']:.2f} ms"
+    )
 
     return 0
 

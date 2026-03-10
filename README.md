@@ -46,6 +46,21 @@ Enter a valid nickname (e.g. `alice`, `bob`) when prompted, then chat: ask for i
 pytest tests/ -v
 ```
 
+## Linting
+
+The project uses [Ruff](https://docs.astral.sh/ruff/) for linting (configured in `pyproject.toml`):
+
+```bash
+# Check code
+ruff check .
+
+# Auto-fix safe issues (e.g. import order)
+ruff check . --fix
+
+# Format code
+ruff format .
+```
+
 ## RAG evaluation (Recall@K, Precision@K, latency)
 
 To evaluate retrieval accuracy and performance:
@@ -74,4 +89,4 @@ Technical docs are in the **`docs/`** folder:
 ## Requirements
 
 - Python 3.10+
-- `requirements.txt`: LangChain, LangGraph, GPT4All, sentence-transformers, pytest, etc. SQLite is used via the standard library (no extra package).
+- `requirements.txt`: LangChain, LangGraph, GPT4All, sentence-transformers, pytest, ruff (linting), etc. SQLite is used via the standard library (no extra package).

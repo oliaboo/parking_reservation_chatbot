@@ -1,13 +1,16 @@
 """Simple tests for chatbot-related behavior (show reservations, intent keywords)."""
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import os
+import tempfile
 
 import pytest
 from src.chatbot.reservation_handler import ReservationHandler
 from src.db.sqlite_db import SQLiteDB
-import tempfile
-import os
 
 
 @pytest.fixture

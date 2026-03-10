@@ -37,3 +37,6 @@ aiohttp>=3.10.0
 
 # Logging
 loguru>=0.7.2
+
+# Linting (optional: pip install ruff)
+ruff>=0.4.0

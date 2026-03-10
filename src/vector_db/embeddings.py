@@ -1,8 +1,12 @@
 """Embedding generation for vector database"""
+
 from typing import List
+
 import numpy as np
+
 try:
     from sentence_transformers import SentenceTransformer
+
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
@@ -13,8 +17,7 @@ class EmbeddingGenerator:
     def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
         if not SENTENCE_TRANSFORMERS_AVAILABLE:
             raise ImportError(
-                "sentence-transformers is not installed. "
-                "pip install sentence-transformers"
+                "sentence-transformers is not installed. pip install sentence-transformers"
             )
         self.model_name = model_name
         self.model = SentenceTransformer(model_name)
