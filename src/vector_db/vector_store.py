@@ -1,17 +1,17 @@
-"""Vector store interface for RAG system"""
+"""Vector store interface for RAG system. Uses FAISS over parking_info.txt by default."""
 from typing import List, Dict, Any, Optional
 import numpy as np
-from .mock_weaviate import MockWeaviateClient, get_mock_client
 from .embeddings import EmbeddingGenerator
+from .faiss_store import FAISSStore
 
 
 class VectorStore:
-    """Vector store wrapper for RAG system"""
+    """Vector store wrapper for RAG. Backed by FAISS over parking_info.txt chunks."""
 
     def __init__(
         self,
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
-        use_mock: bool = True
+        use_mock: bool = True,
     ):
         self.embedding_model = embedding_model
         self.use_mock = use_mock
@@ -28,7 +28,7 @@ class VectorStore:
     def client(self):
         if self._client is None:
             if self.use_mock:
-                self._client = get_mock_client(self.embedding_generator)
+                self._client = FAISSStore(self.embedding_generator)
             else:
                 raise NotImplementedError("Real Weaviate client not yet implemented")
         return self._client

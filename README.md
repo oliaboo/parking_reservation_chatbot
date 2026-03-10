@@ -1,6 +1,6 @@
 # Parking Reservation Chatbot
 
-Chatbot for parking information and reservations (RAG + LangGraph). Identifies users by nickname, stores reservations in SQLite, uses mock Weaviate with content from `parking_info.txt`.
+Chatbot for parking information and reservations (RAG + LangGraph). Identifies users by nickname, stores reservations in SQLite, uses FAISS with content from `data/parking_info.txt`.
 
 ## Setup
 

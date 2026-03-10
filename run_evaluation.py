@@ -27,7 +27,7 @@ def main():
         _ = vector_store.client
     except Exception as e:
         print(f"Failed to load vector store: {e}")
-        print("Install: pip install sentence-transformers")
+        print("Install: pip install sentence-transformers faiss-cpu")
         sys.exit(1)
 
     print("Running retrieval evaluation (Recall@K, Precision@K, latency)...")

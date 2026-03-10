@@ -1,5 +1,9 @@
 """
 RAG evaluation: retrieval accuracy (Recall@K, Precision@K) and performance (latency).
+
+Additional criterion: after retrieving top-k chunks, results are filtered by similarity
+score >= 0.5. Only chunks passing this threshold are used when computing Recall@K and
+Precision@K. This filter is applied in run_retrieval_evaluation().
 """
 import time
 from dataclasses import dataclass, field
@@ -46,6 +50,7 @@ class RAGEvaluator:
     """
     Evaluate RAG retrieval: Recall@K, Precision@K, and retrieval latency.
     Uses a vector store (or RAG system) and a list of EvalItems (query + relevant_doc_ids).
+    Top-k retrieved chunks are filtered by similarity score >= 0.5 before computing metrics.
     """
 
     def __init__(
@@ -68,10 +73,15 @@ class RAGEvaluator:
         """
         Run retrieval for each eval query; compute Recall@K and Precision@K and latency.
         Does not call the LLM.
+
+        Top-k results from similarity_search are filtered: only chunks with
+        similarity score >= 0.5 are kept. Recall@K and Precision@K are computed
+        on this filtered list (order preserved).
         """
         report = EvaluationReport(num_queries=len(self.eval_dataset))
         max_k = max(self.k_values)
         latencies_ms: List[float] = []
+        min_score_threshold = 0.5
 
         for item in self.eval_dataset:
             start = time.perf_counter()
@@ -79,7 +89,12 @@ class RAGEvaluator:
             elapsed_ms = (time.perf_counter() - start) * 1000
             latencies_ms.append(elapsed_ms)
 
-            retrieved_ids = [r.get("id", "") for r in results if r.get("id")]
+            # Filter: keep only chunks with similarity score >= 0.5 (order preserved)
+            retrieved_ids = [
+                r.get("id", "")
+                for r in results
+                if r.get("id") and r.get("score", -1) >= min_score_threshold
+            ]
             relevant = list(item.relevant_doc_ids)
 
             detail = {

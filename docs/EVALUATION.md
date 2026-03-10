@@ -14,6 +14,8 @@ This document describes how to run **performance testing** and **response accura
 
 Evaluation uses **retrieval only** (no LLM): the same vector store and embeddings as the chatbot, with a fixed set of test queries and ground-truth relevant document IDs. This avoids LLM variability and focuses on whether the right chunks from `parking_info.txt` are retrieved.
 
+**Additional criterion:** In `run_retrieval_evaluation()`, the top-k chunks returned by similarity search are **filtered by similarity score ≥ 0.5**. Only chunks with score ≥ 0.5 are used when computing Recall@K and Precision@K (order is preserved). Chunks below the threshold are excluded from the retrieved set.
+
 ---
 
 ## Quick start
@@ -34,7 +36,7 @@ Output includes mean Recall@1, Recall@3, Recall@5, Precision@1/3/5, mean retriev
 
 - **`eval_dataset.py`** — Defines `EvalItem(query, relevant_doc_ids)` and `DEFAULT_EVAL_DATASET`: list of queries with the doc IDs (from the mock Weaviate chunk order) that should be retrieved. Chunk IDs 1, 2, 3, … correspond to the order of paragraphs/sections in `parking_info.txt`.
 - **`rag_evaluator.py`** — `RAGEvaluator(vector_store, eval_dataset, k_values)`:
-  - `run_retrieval_evaluation()` — For each eval query, runs `vector_store.similarity_search(query, k=max_k)`, measures latency, and computes Recall@K and Precision@K for each K in `k_values`.
+  - `run_retrieval_evaluation()` — For each eval query, runs `vector_store.similarity_search(query, k=max_k)`, then **filters** the top-k results to those with **similarity score ≥ 0.5**, measures latency, and computes Recall@K and Precision@K for each K in `k_values` (using the filtered list).
   - `run_performance_test(num_runs, k)` — Runs retrieval repeatedly and returns mean/min/max latency.
   - `EvaluationReport` — Holds recall_at_k, precision_at_k, retrieval_latency_ms, details_per_query.
 - **`format_report(report)`** — Returns a human-readable report string.
@@ -58,7 +60,7 @@ No database or LLM is required; only the vector store (and thus the embedding mo
 - **Precision@K** = (number of relevant docs in top-K) / K.  
   High precision means the top-K are mostly relevant.
 
-For each eval item, “relevant” is defined by the ground-truth `relevant_doc_ids` in the dataset. Retrieved doc IDs come from the vector store’s similarity search result (`id` field).
+For each eval item, “relevant” is defined by the ground-truth `relevant_doc_ids` in the dataset. Retrieved doc IDs come from the vector store’s similarity search result (`id` field), **after filtering** to keep only chunks whose similarity `score` is ≥ 0.5.
 
 ---
 

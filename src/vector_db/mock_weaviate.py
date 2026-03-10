@@ -1,42 +1,9 @@
-"""Mock Weaviate vector database implementation for development"""
+"""Mock Weaviate vector database implementation (for tests / fallback)."""
 
-from pathlib import Path
 from typing import List, Dict, Optional, Any
 import numpy as np
 
-# Path to parking_info.txt (project root)
-PARKING_INFO_PATH = Path(__file__).resolve().parent.parent.parent / "parking_info.txt"
-
-
-def _load_parking_info_chunks() -> List[Dict[str, Any]]:
-    """Load parking_info.txt and split into chunks (by double newline or section)."""
-    if not PARKING_INFO_PATH.exists():
-        # Fallback sample data if file missing
-        return [
-            {"content": "Parking facility: 24/7. Standard and premium spaces.", "metadata": {"type": "general_info"}},
-            {"content": "Rates: standard $5/hour, $30/day; premium $8/hour, $45/day.", "metadata": {"type": "pricing"}},
-            {"content": "Location: 123 Main Street, Downtown. Entrance on Oak Avenue.", "metadata": {"type": "location"}},
-            {"content": "Reservation: provide nickname and preferred date. Check free spaces first.", "metadata": {"type": "booking"}},
-        ]
-    text = PARKING_INFO_PATH.read_text(encoding="utf-8")
-    chunks = []
-    current = []
-    for line in text.split("\n"):
-        line = line.strip()
-        if not line:
-            if current:
-                chunks.append(" ".join(current))
-                current = []
-        else:
-            current.append(line)
-    if current:
-        chunks.append(" ".join(current))
-    if not chunks:
-        chunks = [text[:500] or "Parking information."]
-    return [
-        {"content": c, "metadata": {"source": "parking_info.txt"}}
-        for c in chunks
-    ]
+from .parking_info_loader import load_parking_info_chunks
 
 
 class MockWeaviateClient:
@@ -56,7 +23,7 @@ class MockWeaviateClient:
 
     def _initialize_from_parking_info(self):
         """Load content from parking_info.txt into mock store. Use real embeddings if generator available."""
-        raw_chunks = _load_parking_info_chunks()
+        raw_chunks = load_parking_info_chunks()
         sample_data = []
         contents = []
         for i, ch in enumerate(raw_chunks, 1):

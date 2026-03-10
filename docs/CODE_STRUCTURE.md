@@ -9,11 +9,13 @@ This document describes the project layout and how each module is used.
 ```
 parking_reservation_chatbot/
 ├── run.py                 # Entry point: nickname prompt, init, chat loop
-├── parking_info.txt       # Static content for RAG (location, capacity, booking process, etc.)
+├── data/
+│   ├── parking_info.txt   # Static content for RAG (location, capacity, booking process, etc.)
+│   ├── parking.db         # SQLite DB (users, reservations, prices, working_hours, availability)
+│   ├── faiss_parking.index
+│   └── faiss_parking_docs.json
 ├── requirements.txt
 ├── .env / .env_example
-├── data/
-│   └── parking.db         # SQLite DB (users, reservations, prices, working_hours, availability)
 ├── local_models/          # Local LLM file (e.g. Meta-Llama-3-8B-Instruct.Q4_0.gguf)
 ├── logs/                  # chatbot.log (if logging to file)
 ├── docs/                  # Documentation (this folder)
@@ -24,11 +26,13 @@ parking_reservation_chatbot/
     ├── db/                # SQLite layer
     │   ├── __init__.py
     │   └── sqlite_db.py   # SQLiteDB, get_db(), schema, seed data
-    ├── vector_db/         # Vector store and mock Weaviate
+    ├── vector_db/         # Vector store (FAISS over parking_info.txt)
     │   ├── __init__.py
     │   ├── vector_store.py
     │   ├── embeddings.py
-    │   └── mock_weaviate.py
+    │   ├── parking_info_loader.py   # Load and chunk parking_info.txt
+    │   ├── faiss_store.py           # FAISS index for similarity search
+    │   └── mock_weaviate.py         # Optional mock for tests
     ├── guardrails/        # Sensitive data filtering
     │   ├── __init__.py
     │   ├── guard_rails.py
@@ -88,26 +92,30 @@ parking_reservation_chatbot/
 
 ## 5. Vector store: src/vector_db/
 
-**Role:** Provide text chunks and similarity search for RAG. Production target is Weaviate; currently a mock is used.
+**Role:** Provide text chunks and similarity search for RAG. Uses FAISS over `parking_info.txt`; production Weaviate is optional.
 
 ### vector_store.py
 
 - **VectorStore:** Holds embedding model name and `use_mock` flag. Lazy-inits:
   - `embedding_generator` — EmbeddingGenerator (sentence-transformers).
-  - `client` — MockWeaviateClient (with embedding_generator so chunks are embedded and search is semantic).
+  - `client` — FAISSStore (loads and chunks `parking_info.txt`, builds FAISS index, semantic search).
 - **Methods:** `similarity_search(query, k)`, `get_relevant_context(query, k)` — used by RAGSystem to get context from `parking_info.txt` content.
 
 ### embeddings.py
 
-- **EmbeddingGenerator:** Loads a sentence-transformers model, exposes `generate_embedding(text)` and `generate_embeddings(texts)`. Used by VectorStore and by the mock when building its index.
+- **EmbeddingGenerator:** Loads a sentence-transformers model, exposes `generate_embedding(text)` and `generate_embeddings(texts)`. Used by VectorStore and FAISSStore.
+
+### parking_info_loader.py
+
+- **load_parking_info_chunks():** Reads `data/parking_info.txt`, splits by blank lines into paragraphs; returns list of `{content, metadata}`. Shared by FAISSStore and mock_weaviate.
+
+### faiss_store.py
+
+- **FAISSStore:** On init loads chunks via `load_parking_info_chunks()`, embeds them with the given EmbeddingGenerator, builds a FAISS IndexFlatIP (cosine via normalized vectors). **query(query_vector, limit):** returns top-k documents with id, content, metadata, score. Used as the default RAG backend when `use_mock=True`.
 
 ### mock_weaviate.py
 
-- **MockWeaviateClient:** In-memory “vector DB”. On init:
-  - Reads `parking_info.txt`, splits into chunks (by blank lines).
-  - If an `embedding_generator` is passed (by VectorStore), embeds each chunk so similarity search is meaningful; otherwise uses random vectors.
-- **query(query_vector, limit):** Cosine similarity against stored vectors, returns top-k documents with content and metadata.
-- **add_documents(documents, embeddings):** Used if you add more docs later; not used for initial load.
+- **MockWeaviateClient:** In-memory fallback using the same chunking (parking_info_loader). Used in tests or when FAISS is not desired; not used by default in run.py.
 
 ---
 
