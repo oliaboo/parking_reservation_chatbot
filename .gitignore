@@ -55,8 +55,9 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Project specific
-data/
+# Project specific (track data/seed_data.json for tests and seeding)
+data/*
+!data/seed_data.json
 rag_data/*
 !rag_data/README.md
 !rag_data/parking_info.txt
