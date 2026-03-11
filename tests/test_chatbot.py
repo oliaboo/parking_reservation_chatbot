@@ -14,11 +14,11 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from src.chatbot.chatbot import ParkingChatbot
 from src.chatbot.reservation_handler import ReservationHandler
+from src.config import PROJECT_ROOT
 from src.db.sqlite_db import SQLiteDB
 from src.guardrails.guard_rails import GuardRails
 
-
-_SEED_PATH = str(Path(__file__).resolve().parent.parent / "data" / "seed_data.json")
+_SEED_PATH = str(PROJECT_ROOT / "data" / "seed_data.json")
 
 
 @pytest.fixture

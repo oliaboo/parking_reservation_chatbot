@@ -15,10 +15,10 @@ from src.chatbot.reservation_handler import (
     _date_range_to_list,
     _parse_date_range,
 )
+from src.config import PROJECT_ROOT
 from src.db.sqlite_db import SQLiteDB
 
-
-_SEED_PATH = str(Path(__file__).resolve().parent.parent / "data" / "seed_data.json")
+_SEED_PATH = str(PROJECT_ROOT / "data" / "seed_data.json")
 
 
 @pytest.fixture

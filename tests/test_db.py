@@ -11,11 +11,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from src.config import PROJECT_ROOT
 from src.db.sqlite_db import SQLiteDB
 
-
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_SEED_PATH = str(_PROJECT_ROOT / "data" / "seed_data.json")
+_SEED_PATH = str(PROJECT_ROOT / "data" / "seed_data.json")
 
 
 @pytest.fixture
