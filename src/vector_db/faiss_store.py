@@ -60,7 +60,8 @@ class FAISSStore:
         docs_path: Optional[Path] = None,
         force_rebuild: bool = False,
         metric: str = "cosine",
-    ):
+    ) -> None:
+        """Load index from disk or build from parking_info.txt; metric 'cosine' or 'l2'."""
         if not FAISS_AVAILABLE:
             raise ImportError("faiss is not installed. pip install faiss-cpu")
         self.embedding_generator = embedding_generator

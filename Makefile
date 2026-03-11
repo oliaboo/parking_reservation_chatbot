@@ -1,4 +1,8 @@
 # Shortcuts: run "make tests", "make lint", etc. from project root.
+# PYTHONPATH is set so config finds the project root; required by the app.
+
+PYTHONPATH := $(CURDIR)
+export PYTHONPATH
 
 .PHONY: tests lint evaluation run
 

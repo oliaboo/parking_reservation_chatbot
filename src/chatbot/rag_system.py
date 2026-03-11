@@ -28,6 +28,8 @@ if TYPE_CHECKING:
 
 
 class RAGSystem:
+    """RAG pipeline: retrieve docs, dynamic DB context, LLM answer, guardrails."""
+
     def __init__(
         self,
         vector_store: VectorStore,
@@ -36,6 +38,7 @@ class RAGSystem:
         k: int = 5,
         db: Optional["SQLiteDB"] = None,
     ):
+        """Build RAG system with vector store, LLM, guardrails, and optional DB for dynamic context."""
         self.vector_store = vector_store
         self.llm_provider = llm_provider
         self.guard_rails = guard_rails
@@ -80,6 +83,7 @@ Answer:""",
     def retrieve_context(
         self, query: str, allow_reservation_data: bool = False
     ) -> List[Dict[str, Any]]:
+        """Validate query, run similarity search, filter docs; raise ValueError if query unsafe."""
         is_safe, error_msg = self.guard_rails.validate_query(
             query, allow_reservation_data=allow_reservation_data
         )
@@ -122,6 +126,7 @@ Answer:""",
         return "\n\n".join(parts) if parts else ""
 
     def generate_response(self, query: str) -> str:
+        """Retrieve context, build prompt, run LLM, validate response; return answer text."""
         documents = self.retrieve_context(query)
         dynamic = self._get_dynamic_context()
         if not documents and not dynamic:
@@ -146,6 +151,7 @@ Answer:""",
         return filtered_response
 
     def get_context_string(self, query: str) -> str:
+        """Return concatenated relevant context for the query (no LLM)."""
         return self.vector_store.get_relevant_context(query, k=self.k)
 
     INTENT_PROMPT = """You are a parking assistant. Classify the user's intent into exactly one of: reserve, show_reservations, general.

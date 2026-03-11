@@ -6,13 +6,16 @@ from .sensitive_data_filter import SensitiveDataFilter
 
 
 class GuardRails:
-    def __init__(self, enabled: bool = True, threshold: float = 0.7):
+    """Validates queries and responses for sensitive data; filters retrieved documents."""
+
+    def __init__(self, enabled: bool = True, threshold: float = 0.7) -> None:
         self.enabled = enabled
         self.filter = SensitiveDataFilter(threshold=threshold) if enabled else None
 
     def validate_query(
         self, query: str, allow_reservation_data: bool = False
     ) -> Tuple[bool, Optional[str]]:
+        """Return (True, None) if safe; (False, error_message) if sensitive data detected."""
         if not self.enabled:
             return True, None
         if allow_reservation_data:
@@ -34,6 +37,7 @@ class GuardRails:
         return True, None
 
     def validate_response(self, response: str) -> Tuple[bool, str]:
+        """Return (True, response) or (True, redacted_response) if sensitive data was redacted."""
         if not self.enabled:
             return True, response
         if self.filter and self.filter.contains_sensitive_data(response):
@@ -41,9 +45,7 @@ class GuardRails:
         return True, response
 
     def filter_retrieved_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter or redact sensitive content in documents before passing to LLM."""
         if not self.enabled or not self.filter:
             return documents
         return self.filter.filter_documents(documents)
-
-    def is_enabled(self) -> bool:
-        return self.enabled

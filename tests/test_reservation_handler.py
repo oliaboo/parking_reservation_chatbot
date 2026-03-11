@@ -18,11 +18,14 @@ from src.chatbot.reservation_handler import (
 from src.db.sqlite_db import SQLiteDB
 
 
+_SEED_PATH = str(Path(__file__).resolve().parent.parent / "data" / "seed_data.json")
+
+
 @pytest.fixture
 def temp_db():
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
-    db = SQLiteDB(db_path=path)
+    db = SQLiteDB(db_path=path, seed_path=_SEED_PATH)
     yield db
     try:
         os.unlink(path)

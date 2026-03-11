@@ -17,7 +17,10 @@ class ChatState(TypedDict):
 
 
 class ParkingChatbot:
+    """LangGraph-based chatbot: intent routing, RAG answers, and reservation flow."""
+
     def __init__(self, rag_system: RAGSystem, reservation_handler: ReservationHandler):
+        """Build chatbot with given RAG system and reservation handler."""
         self.rag_system = rag_system
         self.reservation_handler = reservation_handler
         self.graph = self._build_graph()
@@ -136,6 +139,7 @@ class ParkingChatbot:
         return state
 
     def chat(self, user_input: str, conversation_history: Optional[List] = None) -> str:
+        """Process user message and return the assistant reply (optionally with history)."""
         messages = conversation_history or []
         messages.append(HumanMessage(content=user_input))
         result = self.graph.invoke({"messages": messages})
@@ -145,5 +149,6 @@ class ParkingChatbot:
                 return last_message.content
         return "I'm sorry, I couldn't generate a response."
 
-    def reset_conversation(self):
+    def reset_conversation(self) -> None:
+        """Clear any in-progress reservation state."""
         self.reservation_handler.current_reservation = None

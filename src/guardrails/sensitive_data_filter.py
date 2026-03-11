@@ -13,7 +13,9 @@ except ImportError:
 
 
 class SensitiveDataFilter:
-    def __init__(self, threshold: float = 0.7):
+    """Detects and redacts SSN, card, email, phone; optional NER for names/orgs."""
+
+    def __init__(self, threshold: float = 0.7) -> None:
         self.threshold = threshold
         self.sensitive_patterns = [
             r"\b\d{3}-\d{2}-\d{4}\b",
@@ -34,6 +36,7 @@ class SensitiveDataFilter:
                 pass
 
     def contains_sensitive_data(self, text: str) -> bool:
+        """Return True if text matches sensitive patterns or NER entities above threshold."""
         for pattern in self.sensitive_patterns:
             if re.search(pattern, text, re.IGNORECASE):
                 return True
@@ -49,6 +52,7 @@ class SensitiveDataFilter:
         return False
 
     def filter_sensitive_data(self, text: str, replacement: str = "[REDACTED]") -> str:
+        """Replace sensitive spans with replacement; return filtered text."""
         if not self.contains_sensitive_data(text):
             return text
         filtered_text = text
@@ -68,6 +72,7 @@ class SensitiveDataFilter:
         return filtered_text
 
     def filter_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Return documents with sensitive content in 'content' filtered or dropped."""
         filtered_docs = []
         for doc in documents:
             if "content" in doc:
@@ -79,6 +84,3 @@ class SensitiveDataFilter:
             else:
                 filtered_docs.append(doc)
         return filtered_docs
-
-    def is_safe_to_return(self, text: str) -> bool:
-        return not self.contains_sensitive_data(text)

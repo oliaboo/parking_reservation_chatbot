@@ -1,32 +1,22 @@
-"""Main entry point for the parking reservation chatbot"""
+"""Main entry point for the parking reservation chatbot.
+
+Set PYTHONPATH to the project root so the "src" package is found. Paths to data/,
+rag_data/, local_models/, and logs/ are resolved relative to the project root.
+"""
 
 import os
 import sys
 from pathlib import Path
 
-# Ensure project root is on path so "src" package is found (works from any cwd)
-_project_root = Path(__file__).resolve().parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+from src.chatbot.chatbot import ParkingChatbot
+from src.chatbot.llm_setup import LLMProvider
+from src.chatbot.rag_system import RAGSystem
+from src.chatbot.reservation_handler import ReservationHandler
+from src.config import settings
+from src.db.sqlite_db import get_db
+from src.guardrails.guard_rails import GuardRails
+from src.vector_db.vector_store import VectorStore
 
-# Change to project root so paths like local_models/, rag_data/, and data/ resolve correctly
-os.chdir(_project_root)
-
-try:
-    from src.chatbot.chatbot import ParkingChatbot
-    from src.chatbot.llm_setup import LLMProvider
-    from src.chatbot.rag_system import RAGSystem
-    from src.chatbot.reservation_handler import ReservationHandler
-    from src.config import settings
-    from src.db.sqlite_db import get_db
-    from src.guardrails.guard_rails import GuardRails
-    from src.vector_db.vector_store import VectorStore
-except ModuleNotFoundError as e:
-    print(f"Import error: {e}")
-    print(f"Project root: {_project_root}")
-    print("Run from the project root: cd /path/to/parking_reservation_chatbot && python run.py")
-    print("Or set PYTHONPATH: PYTHONPATH=/path/to/parking_reservation_chatbot python run.py")
-    sys.exit(1)
 
 # Try to import loguru, fallback to standard logging
 try:
@@ -144,9 +134,10 @@ def initialize_system(nickname: str):
 def main():
     """Main function to run the chatbot"""
     setup_logging()
-    logger.info("=" * 60)
+    number_of_symbols = 60
+    logger.info("=" * number_of_symbols)
     logger.info(f"Starting {settings.chatbot_name}")
-    logger.info("=" * 60)
+    logger.info("=" * number_of_symbols)
     db = get_db()
     # Ask for nickname until it exists in users table
     while True:
@@ -158,11 +149,11 @@ def main():
             break
         print("Nickname not found. Please try again or use a registered nickname.")
     chatbot = initialize_system(nickname)
-    print("\n" + "=" * 60)
+    print("\n" + "=" * number_of_symbols)
     print(f"Welcome to {settings.chatbot_name}, {nickname}!")
     print("I can help you with parking information and reservations.")
     print("Type 'quit' or 'exit' to end the conversation.")
-    print("=" * 60 + "\n")
+    print("=" * number_of_symbols + "\n")
     conversation_history = []
 
     while True:

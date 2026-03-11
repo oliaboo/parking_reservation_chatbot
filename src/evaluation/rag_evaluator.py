@@ -127,6 +127,7 @@ class RAGEvaluator:
         return report
 
     def run_performance_test(self, num_runs: int = 5, k: int = 5) -> Dict[str, float]:
+        """Run num_runs similarity searches; return mean/min/max latency (ms) and k."""
         """
         Run retrieval repeatedly to measure average latency (no accuracy).
         Returns dict with mean_ms, min_ms, max_ms.

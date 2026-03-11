@@ -49,13 +49,16 @@ def _date_range_to_list(start: str, end: str) -> List[str]:
 
 
 class ReservationState:
-    def __init__(self):
+    """Holds date or date range for one reservation in progress."""
+
+    def __init__(self) -> None:
         self.date: Optional[str] = None
         self.start_date: Optional[str] = None
         self.end_date: Optional[str] = None
         self.is_complete: bool = False
 
     def update(self, field: str, value: str) -> bool:
+        """Set field (e.g. date) from user input; return True if parsed successfully."""
         if field != "date":
             return False
         single = _parse_single_date(value)
@@ -81,6 +84,7 @@ class ReservationState:
         return []
 
     def to_dict(self) -> Dict:
+        """Return date/range and completion as a dict."""
         return {
             "date": self.date,
             "start_date": self.start_date,
@@ -88,7 +92,8 @@ class ReservationState:
             "is_complete": self.is_complete,
         }
 
-    def reset(self):
+    def reset(self) -> None:
+        """Clear all fields and mark incomplete."""
         self.date = None
         self.start_date = None
         self.end_date = None
@@ -96,7 +101,9 @@ class ReservationState:
 
 
 class ReservationHandler:
-    def __init__(self, db: Optional[SQLiteDB] = None):
+    """Orchestrates reservation flow: date/range input, availability check, DB write."""
+
+    def __init__(self, db: Optional[SQLiteDB] = None) -> None:
         self.db = db or SQLiteDB()
         self.current_reservation: Optional[ReservationState] = None
         self.current_field_index: int = 0
@@ -107,17 +114,21 @@ class ReservationHandler:
         }
 
     def set_nickname(self, nickname: str) -> None:
+        """Set the current user's nickname for reservations."""
         self._nickname = nickname.strip() if nickname else None
 
     def get_nickname(self) -> Optional[str]:
+        """Return the current user's nickname, or None."""
         return self._nickname
 
     def start_reservation(self) -> ReservationState:
+        """Start a new reservation and return its state."""
         self.current_reservation = ReservationState()
         self.current_field_index = 0
         return self.current_reservation
 
     def get_current_field(self) -> Optional[str]:
+        """Return the field we are currently collecting, or None."""
         if not self.current_reservation:
             return None
         if self.current_field_index < len(self.FIELD_ORDER):
@@ -125,10 +136,12 @@ class ReservationHandler:
         return None
 
     def get_next_field_prompt(self) -> Optional[str]:
+        """Return the prompt string for the next field to collect."""
         f = self.get_current_field()
         return self.FIELD_PROMPTS.get(f, f"Please provide {f}") if f else None
 
     def process_user_input(self, user_input: str) -> Tuple[bool, str]:
+        """Handle date/range input: validate, check availability, add reservations. Return (success, message)."""
         if not self._nickname:
             return False, "Please identify yourself first (nickname is required at startup)."
         if not self.current_reservation:
@@ -193,9 +206,11 @@ class ReservationHandler:
         return False, "Could not save some reservations. Please try again."
 
     def get_current_reservation(self) -> Optional[ReservationState]:
+        """Return the in-progress reservation state, or None."""
         return self.current_reservation
 
     def get_active_reservations(self) -> List[str]:
+        """Return list of reserved dates for the current nickname."""
         if not self._nickname:
             return []
         rows = self.db.get_reservations_by_nickname(self._nickname)

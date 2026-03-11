@@ -20,9 +20,6 @@ python3 -m venv .venv
 
 # Activate (Unix/macOS)
 source .venv/bin/activate
-
-# Activate (Windows)
-.venv\Scripts\activate
 ```
 
 ### 2. Install dependencies
@@ -39,6 +36,12 @@ cp .env_example .env
 ```
 
 ## Run
+
+set **PYTHONPATH**:
+
+```bash
+export PYTHONPATH=/path/to/parking_reservation_chatbot
+```
 
 From the **project root**:
 
