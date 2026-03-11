@@ -52,3 +52,37 @@ def test_free_spaces(temp_db):
     # Unknown date can be None or a value depending on seed
     free_unknown = temp_db.get_free_spaces("2099-01-01")
     assert free_unknown is None or free_unknown >= 0
+
+
+def test_create_pending_request(temp_db):
+    """create_pending_request returns request_id and row is queryable."""
+    rid = temp_db.create_pending_request("alice", ["2025-03-10", "2025-03-11"])
+    assert rid.isdigit()
+    assert temp_db.get_request_status(rid) == "pending"
+    details = temp_db.get_pending_request_details(rid)
+    assert details is not None
+    nickname, dates = details
+    assert nickname == "alice"
+    assert dates == ["2025-03-10", "2025-03-11"]
+
+
+def test_get_request_status_unknown(temp_db):
+    """get_request_status returns None for unknown id."""
+    assert temp_db.get_request_status("99999") is None
+    assert temp_db.get_request_status("0") is None
+
+
+def test_set_request_status(temp_db):
+    """set_request_status updates only pending requests."""
+    rid = temp_db.create_pending_request("bob", ["2025-04-01"])
+    assert temp_db.get_request_status(rid) == "pending"
+    assert temp_db.set_request_status(rid, "approved") is True
+    assert temp_db.get_request_status(rid) == "approved"
+    # Idempotent update from pending is no-op after first update
+    assert temp_db.set_request_status(rid, "rejected") is False
+    assert temp_db.get_request_status(rid) == "approved"
+
+
+def test_get_pending_request_details_unknown(temp_db):
+    """get_pending_request_details returns None for unknown id."""
+    assert temp_db.get_pending_request_details("99999") is None

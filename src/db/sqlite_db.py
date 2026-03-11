@@ -1,9 +1,10 @@
-"""SQLite database for dynamic data: users, reservations, availability, prices, working hours."""
+"""SQLite database for dynamic data: users, reservations, availability, prices, working hours, reservation_requests."""
 
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Literal, Optional, Tuple
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "parking.db"
 
@@ -34,6 +35,14 @@ class SQLiteDB:
                 CREATE TABLE IF NOT EXISTS working_hours (id INTEGER PRIMARY KEY, day_of_week INTEGER, open_time TEXT, close_time TEXT, description TEXT);
                 CREATE TABLE IF NOT EXISTS prices (id INTEGER PRIMARY KEY, type TEXT, rate REAL, unit TEXT);
                 CREATE TABLE IF NOT EXISTS availability (date TEXT PRIMARY KEY, free_spaces INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS reservation_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nickname TEXT NOT NULL,
+                    dates_json TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT
+                );
             """)
 
     def _seed_if_empty(self) -> None:
@@ -117,6 +126,69 @@ class SQLiteDB:
             return conn.execute(
                 "SELECT day_of_week, open_time, close_time, description FROM working_hours"
             ).fetchall()
+
+    # --- Reservation requests (pending admin approval) ---
+
+    def create_pending_request(self, nickname: str, dates: List[str]) -> str:
+        """Insert a pending reservation request; return request_id (string)."""
+        nickname = nickname.strip()
+        dates_json = json.dumps([d.strip() for d in dates])
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO reservation_requests (nickname, dates_json, status, created_at) VALUES (?, ?, 'pending', ?)",
+                (nickname, dates_json, now),
+            )
+            conn.commit()
+            return str(cur.lastrowid)
+
+    def get_request_status(
+        self, request_id: str
+    ) -> Optional[Literal["pending", "approved", "rejected"]]:
+        """Return status for the request, or None if not found."""
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT status FROM reservation_requests WHERE id = ?", (request_id.strip(),)
+            ).fetchone()
+            if not row:
+                return None
+            s = row[0]
+            if s in ("pending", "approved", "rejected"):
+                return s
+            return None
+
+    def set_request_status(
+        self, request_id: str, status: Literal["approved", "rejected"]
+    ) -> bool:
+        """Update request status; return True if a row was updated."""
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self._get_conn() as conn:
+            cur = conn.execute(
+                "UPDATE reservation_requests SET status = ?, updated_at = ? WHERE id = ? AND status = 'pending'",
+                (status, now, request_id.strip()),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def get_pending_request_details(
+        self, request_id: str
+    ) -> Optional[Tuple[str, List[str]]]:
+        """Return (nickname, dates) for the request, or None if not found."""
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT nickname, dates_json FROM reservation_requests WHERE id = ?",
+                (request_id.strip(),),
+            ).fetchone()
+            if not row:
+                return None
+            nickname, dates_json = row[0], row[1]
+            try:
+                dates = json.loads(dates_json)
+                if isinstance(dates, list) and all(isinstance(d, str) for d in dates):
+                    return (nickname, dates)
+            except (json.JSONDecodeError, TypeError):
+                pass
+            return None
 
 
 _db: Optional[SQLiteDB] = None
