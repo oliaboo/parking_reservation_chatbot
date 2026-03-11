@@ -45,9 +45,12 @@ class ParkingChatbot:
         return False
 
     def _answer_with_rag(self, state: Dict[str, Any], messages: List, user_input: str) -> Dict[str, Any]:
-        """Produce RAG response, append AIMessage, return state."""
+        """Produce RAG response, append AIMessage, return state. Uses last 10 messages as context."""
+        recent = messages[:-1][-10:]  # Exclude current user message; keep last 10
         try:
-            response = self.rag_system.generate_response(user_input)
+            response = self.rag_system.generate_response(
+                user_input, conversation_history=recent if recent else None
+            )
         except ValueError as e:
             response = str(e)
         except Exception as e:

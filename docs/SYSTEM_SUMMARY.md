@@ -13,7 +13,7 @@ The system is a **parking reservation chatbot**: it helps users get **informatio
 
 1. **Start** — You run `python run.py`. The app asks for your **nickname** (e.g. `alice`, `bob`). Only nicknames that exist in the users table are accepted, so you must use a registered nickname.
 2. **Chat loop** — You type messages; the chatbot replies in plain text. You can:
-   - **Ask general questions** — e.g. “What are the opening hours?”, “How much does parking cost?” The system uses **RAG**: it finds relevant text from a parking info document and current DB data (prices, hours), then an LLM (GPT4All) generates an answer.
+   - **Ask general questions** — e.g. “What are the opening hours?”, “How much does parking cost?” The system uses **RAG**: it finds relevant text from a parking info document and current DB data (prices, hours), then an LLM (GPT4All) generates an answer. The **last 10 messages** (user + assistant) from the general-query path are kept and passed into the RAG prompt as conversation context so follow-up questions can be answered with memory.
    - **Make a reservation** — Say something like “I want to reserve” or “book a spot”; when prompted, give a **date** in `YYYY-MM-DD` or a range (e.g. `2025-03-10 - 2025-03-12`). The system checks availability and writes one reservation per day.
    - **Show my reservations** — Say “show my reservations” (or similar); you get a list of your reserved dates with no LLM call.
 3. **Exit** — Type `quit`, `exit`, or `bye` to end the session.
@@ -94,7 +94,7 @@ flowchart TB
 
 - **handle_show_reservations:** `get_reservations_by_nickname(nickname)` → one AI message. No RAG/LLM.
 - **handle_reservation:** validate_query(allow_reservation_data=True); parse date or range (YYYY-MM-DD or YYYY-MM-DD - YYYY-MM-DD); for each date `get_free_spaces` then `add_reservation`; one row per day. Writes only `reservations`.
-- **handle_general_query (when general):** validate_query (full); similarity_search + get_prices/get_working_hours; filter_retrieved_documents; LLM prompt; validate_response. Reads vector store + prices + working_hours; writes nothing.
+- **handle_general_query (when general):** validate_query (full); **last 10 messages** (from this path only) passed as conversation context; similarity_search + get_prices/get_working_hours; filter_retrieved_documents; LLM prompt (context + recent conversation + question); validate_response. Reads vector store + prices + working_hours; writes nothing.
 
 ```mermaid
 flowchart TB
@@ -145,15 +145,16 @@ flowchart LR
 
 1. **Retrieve:** `vector_store.similarity_search(query, k)` → top-k chunks (id, content, metadata, score).
 2. **Dynamic context:** `db.get_prices()`, `db.get_working_hours()` → text appended to context.
-3. **Guardrails:** `guard_rails.validate_query(query)`; `guard_rails.filter_retrieved_documents(documents)`.
-4. **Prompt:** "Use the following context... Context: {chunks + prices/hours}\n\nQuestion: {query}\nAnswer:"
-5. **LLM:** GPT4All generates answer.
-6. **Response guardrails:** `guard_rails.validate_response(response)` → redacted answer returned.
+3. **Conversation memory:** When answering a general question, the **last 10 messages** (user and assistant) from the general-query path are formatted as "User: ... Assistant: ..." and prepended to the context so the LLM can use recent dialogue. Only messages that went through handle_general_query are included (no reservation/show-reservations turns).
+4. **Guardrails:** `guard_rails.validate_query(query)`; `guard_rails.filter_retrieved_documents(documents)`.
+5. **Prompt:** "Use the following context... Context: [recent conversation if any +] {chunks + prices/hours}\n\nQuestion: {query}\nAnswer:"
+6. **LLM:** GPT4All generates answer.
+7. **Response guardrails:** `guard_rails.validate_response(response)` → redacted answer returned.
 
 **Components**
 
 - **VectorStore** — EmbeddingGenerator + FAISSStore; `similarity_search`, `get_relevant_context`.
-- **RAGSystem** — VectorStore, LLMProvider, GuardRails, optional DB; `classify_intent(user_input)` uses the LLM to return one of `reserve`, `show_reservations`, `general`; `generate_response` implements the RAG steps above.
+- **RAGSystem** — VectorStore, LLMProvider, GuardRails, optional DB; `classify_intent(user_input)` uses the LLM to return one of `reserve`, `show_reservations`, `general`; `generate_response(query, conversation_history=None)` implements the RAG steps above. When `conversation_history` is provided (up to 10 messages from the chatbot), it is included in the prompt as "Recent conversation" so the LLM can answer follow-ups with memory.
 
 ```mermaid
 flowchart LR

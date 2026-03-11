@@ -145,7 +145,7 @@ parking_reservation_chatbot/
 - **_handle_reservation** (internal): Validate query with guardrails (reservation mode), then start reservation or process_user_input (date/range) and return the handler message.
 - **_handle_show_reservations** (internal): `reservation_handler.get_active_reservations()` → format and return as one AI message.
 - **_looks_like_date(text):** True if input matches a single date (YYYY-MM-DD) or date range; used when in reservation so date-like input goes to `_handle_reservation` and other input is intent-classified (user can cancel, show reservations, or ask a question).
-- **chat(user_input, conversation_history):** Build state with messages, invoke graph, return last AI message content.
+- **chat(user_input, conversation_history):** Build state with messages, invoke graph, return last AI message content. When the turn is routed to RAG (general), the **last 10 messages** from the history (excluding the current user message) are passed to `generate_response` as conversation context.
 
 **Uses:** RAGSystem (classify_intent + generate_response), ReservationHandler (and thus db for reservations and show-reservations).
 
@@ -153,12 +153,13 @@ parking_reservation_chatbot/
 
 - **RAGSystem:** Combines vector store, LLM, guard rails, and optional `db`. Builds a prompt template (context + question → answer). Uses either a QA chain (if available) or a simple “format prompt + llm.invoke” path.
 - **classify_intent(user_input):** Uses the LLM with a short prompt to classify the user's intent into **reserve**, **show_reservations**, or **general**. Used by the chatbot for routing each turn.
-- **generate_response(query):**
-  1. Retrieve documents: `vector_store.similarity_search(query, k)` (from parking_info.txt).
-  2. Append dynamic context: `db.get_prices()`, `db.get_working_hours()` formatted as text.
-  3. Validate query with guard_rails; filter retrieved documents.
-  4. Build context string, call LLM with prompt.
-  5. Validate and filter response with guard_rails, return.
+- **generate_response(query, conversation_history=None):** When answering a general question, the chatbot passes the **last 10 messages** (user + assistant) from the general-query path as `conversation_history`; these are formatted as "User: ... Assistant: ..." and included in the RAG prompt so the LLM can answer follow-ups with memory.
+  1. If `conversation_history` is provided, format it and prepend to context as "Recent conversation (for context): ...".
+  2. Retrieve documents: `vector_store.similarity_search(query, k)` (from parking_info.txt).
+  3. Append dynamic context: `db.get_prices()`, `db.get_working_hours()` formatted as text.
+  4. Validate query with guard_rails; filter retrieved documents.
+  5. Build context string, call LLM with prompt.
+  6. Validate and filter response with guard_rails, return.
 - **Uses:** VectorStore, LLMProvider, GuardRails, SQLiteDB (optional).
 
 ### llm_setup.py

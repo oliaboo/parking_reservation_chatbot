@@ -81,7 +81,7 @@ The graph has a single node: **handle_general_query**. Every turn runs this node
 
 - **reserve** — user wants to make/book a new parking reservation → `_handle_reservation`.
 - **show_reservations** — user wants to see/list their existing reservations → `_handle_show_reservations`.
-- **general** — any other question or statement → RAG: `rag_system.generate_response(user_input)` (retrieve context + LLM answer).
+- **general** — any other question or statement → RAG: `rag_system.generate_response(user_input, conversation_history=...)` (retrieve context + **last 10 messages** from the general-query path as conversation context + LLM answer).
 
 **Reservation in progress:** If `get_current_reservation()` is not `None` (bot is waiting for a date), the message is first checked: if it **looks like a date** (YYYY-MM-DD or range), it is passed to `_handle_reservation`. Otherwise intent is classified so the user can say "show my reservations", "cancel", or ask a general question; **show_reservations** or **general** clear the current reservation and run that path, so the user is not stuck in the reservation flow.
 
@@ -122,13 +122,14 @@ Data written: only `reservations` table (nickname + date per row). Read: `availa
   - **show_reservations** → call `_handle_show_reservations(state)` (see 4.1).
   - **general** → RAG response:
     1. **Query validation:** `rag_system.guard_rails.validate_query(user_input)` — full sensitive-data check (SSN, card, email, phone). If not safe → return error message, no RAG.
-    2. **Retrieve context:** inside `rag_system.generate_response(user_input)`:
+    2. **Conversation memory:** The **last 10 messages** (user + assistant) from the general-query path are preserved and passed as `conversation_history` into `generate_response` so the LLM can use recent dialogue (only turns that went through this path; reservation/show-reservations turns are not included).
+    3. **Retrieve context:** inside `rag_system.generate_response(user_input, conversation_history=...)`:
        - **Vector store:** `vector_store.similarity_search(query, k)` → FAISS uses embeddings from `parking_info.txt` chunks.
        - **Dynamic context:** `db.get_prices()` and `db.get_working_hours()` → formatted text appended to context.
        - **Guardrails:** `guard_rails.filter_retrieved_documents(documents)`.
-    3. **LLM:** Prompt = "Use the following context... Context: {vector + dynamic}\n\nQuestion: {query}\nAnswer:". LLM generates answer.
-    4. **Response guardrails:** `guard_rails.validate_response(response)` → redact sensitive data in the answer.
-    5. Return filtered response as one AI message.
+    4. **LLM:** Prompt = "Use the following context... Context: [recent conversation if any +] {vector + dynamic}\n\nQuestion: {query}\nAnswer:". LLM generates answer.
+    5. **Response guardrails:** `guard_rails.validate_response(response)` → redact sensitive data in the answer.
+    6. Return filtered response as one AI message.
 
 Data read: vector store (from file), `prices` and `working_hours` tables. Nothing written.
 

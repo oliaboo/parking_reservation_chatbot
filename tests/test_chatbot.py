@@ -218,3 +218,93 @@ def test_rag_dynamic_context_includes_availability_for_tomorrow(temp_db):
     assert "Today's date: 2025-03-10" in ctx
     assert "tomorrow" in ctx
     assert "spaces available" in ctx
+
+
+def test_rag_first_turn_called_without_conversation_history(temp_db):
+    """First general question should call generate_response with no conversation history."""
+    handler = ReservationHandler(db=temp_db)
+    handler.set_nickname("alice")
+    mock_rag = MagicMock()
+    mock_rag.guard_rails.validate_query = MagicMock(return_value=(True, None))
+    mock_rag.classify_intent = MagicMock(return_value="general")
+    mock_rag.generate_response = MagicMock(return_value="We have 100 spaces.")
+    chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
+    chatbot.chat("How many parking spaces do you have?")
+    mock_rag.generate_response.assert_called_once()
+    call_kwargs = mock_rag.generate_response.call_args[1]
+    assert call_kwargs.get("conversation_history") is None
+
+
+def test_rag_second_turn_called_with_conversation_history(temp_db):
+    """Second general question should call generate_response with first exchange in conversation_history."""
+    handler = ReservationHandler(db=temp_db)
+    handler.set_nickname("alice")
+    mock_rag = MagicMock()
+    mock_rag.guard_rails.validate_query = MagicMock(return_value=(True, None))
+    mock_rag.classify_intent = MagicMock(return_value="general")
+    mock_rag.generate_response = MagicMock(
+        side_effect=["We have 100 spaces.", "Yes, you can pay by card."]
+    )
+    chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
+    r1 = chatbot.chat("How many spaces?")
+    history = [
+        HumanMessage(content="How many spaces?"),
+        AIMessage(content=r1),
+    ]
+    chatbot.chat("Can I pay by card?", conversation_history=history)
+    assert mock_rag.generate_response.call_count == 2
+    second_call_kwargs = mock_rag.generate_response.call_args_list[1][1]
+    conv = second_call_kwargs.get("conversation_history")
+    assert conv is not None
+    assert len(conv) == 2
+    assert conv[0].content == "How many spaces?"
+    assert conv[1].content == "We have 100 spaces."
+
+
+def test_rag_memory_caps_at_10_messages(temp_db):
+    """When history has more than 10 messages, only the last 10 are passed to generate_response."""
+    handler = ReservationHandler(db=temp_db)
+    handler.set_nickname("alice")
+    mock_rag = MagicMock()
+    mock_rag.guard_rails.validate_query = MagicMock(return_value=(True, None))
+    mock_rag.classify_intent = MagicMock(return_value="general")
+    mock_rag.generate_response = MagicMock(return_value="OK")
+    chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
+    # Build history with 12 messages (6 user + 6 assistant)
+    history = []
+    for i in range(6):
+        history.append(HumanMessage(content=f"Question {i}"))
+        history.append(AIMessage(content=f"Answer {i}"))
+    chatbot.chat("Question 6?", conversation_history=history)
+    conv = mock_rag.generate_response.call_args[1].get("conversation_history")
+    assert conv is not None
+    assert len(conv) == 10
+    # Last 10 of 12: indices 2..11 = Q1, A1, Q2, A2, Q3, A3, Q4, A4, Q5, A5
+    assert conv[0].content == "Question 1"
+    assert conv[-1].content == "Answer 5"
+
+
+def test_rag_format_conversation_includes_user_and_assistant():
+    """_format_conversation_for_prompt produces 'User:' and 'Assistant:' lines."""
+    from src.chatbot.rag_system import RAGSystem
+
+    mock_rag = RAGSystem(
+        vector_store=MagicMock(),
+        llm_provider=MagicMock(),
+        guard_rails=MagicMock(),
+    )
+    messages = [
+        HumanMessage(content="What are the hours?"),
+        AIMessage(content="We are open 9 to 5."),
+    ]
+    text = mock_rag._format_conversation_for_prompt(messages)
+    assert "User: What are the hours?" in text
+    assert "Assistant: We are open 9 to 5." in text
+    # Dict format (as from run.py) also supported
+    dict_messages = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi there"},
+    ]
+    text2 = mock_rag._format_conversation_for_prompt(dict_messages)
+    assert "User: Hello" in text2
+    assert "Assistant: Hi there" in text2

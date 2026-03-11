@@ -4,20 +4,8 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
-
-try:
-    from langchain.chains.question_answering import load_qa_chain
-
-    LOAD_QA_CHAIN_AVAILABLE = True
-except ImportError:
-    try:
-        from langchain.chains import load_qa_chain
-
-        LOAD_QA_CHAIN_AVAILABLE = True
-    except ImportError:
-        LOAD_QA_CHAIN_AVAILABLE = False
-        load_qa_chain = None
 
 from ..guardrails.guard_rails import GuardRails
 from ..vector_db.vector_store import VectorStore
@@ -47,7 +35,8 @@ class RAGSystem:
         self.prompt_template = PromptTemplate(
             input_variables=["context", "question"],
             template="""You are a helpful parking reservation assistant. Use the following context to answer the user's question.
-If the context doesn't contain enough information, politely say so.
+
+Rules: Give only the direct answer to the user. Do not describe what the user asked, do not show your reasoning steps, and do not add phrases like "The user wants to know..." or "Please let me know if I can help." If the context doesn't contain enough information, say so briefly.
 
 Context:
 {context}
@@ -56,29 +45,7 @@ Question: {question}
 
 Answer:""",
         )
-        if LOAD_QA_CHAIN_AVAILABLE and load_qa_chain is not None:
-            try:
-                self.qa_chain = load_qa_chain(
-                    llm=llm_provider.get_llm(), chain_type="stuff", prompt=self.prompt_template
-                )
-                self._use_llm_chain = False
-            except Exception:
-                self._use_llm_chain = True
-        else:
-            self._use_llm_chain = True
-
-        if self._use_llm_chain:
-            try:
-                from langchain.chains import LLMChain
-            except ImportError:
-                try:
-                    from langchain.chains.llm import LLMChain
-                except ImportError:
-                    self._use_simple_chain = True
-                    self.llm = llm_provider.get_llm()
-                    return
-            if not hasattr(self, "_use_simple_chain"):
-                self.qa_chain = LLMChain(llm=llm_provider.get_llm(), prompt=self.prompt_template)
+        self.llm = llm_provider.get_llm()
 
     def retrieve_context(
         self, query: str, allow_reservation_data: bool = False
@@ -125,8 +92,24 @@ Answer:""",
             pass
         return "\n\n".join(parts) if parts else ""
 
-    def generate_response(self, query: str) -> str:
-        """Retrieve context, build prompt, run LLM, validate response; return answer text."""
+    def _format_conversation_for_prompt(self, messages: List[Any]) -> str:
+        """Format last N messages as 'User: ... Assistant: ...' for the prompt."""
+        lines = []
+        for msg in messages:
+            if hasattr(msg, "content"):
+                role = "User" if isinstance(msg, HumanMessage) else "Assistant"
+                lines.append(f"{role}: {msg.content}")
+            elif isinstance(msg, dict):
+                label = "User" if msg.get("role") == "user" else "Assistant"
+                lines.append(f"{label}: {msg.get('content', '')}")
+            else:
+                lines.append(str(msg))
+        return "\n".join(lines) if lines else ""
+
+    def generate_response(
+        self, query: str, conversation_history: Optional[List[Any]] = None
+    ) -> str:
+        """Retrieve context, build prompt (with optional recent conversation), run LLM, validate response."""
         documents = self.retrieve_context(query)
         dynamic = self._get_dynamic_context()
         if not documents and not dynamic:
@@ -139,14 +122,14 @@ Answer:""",
         if dynamic:
             context_text = (context_text + "\n\n" + dynamic) if context_text else dynamic
             langchain_docs = langchain_docs + [Document(page_content=dynamic, metadata={})]
-        if hasattr(self, "_use_simple_chain") and self._use_simple_chain:
-            formatted_prompt = self.prompt_template.format(context=context_text, question=query)
-            result = self.llm.invoke(formatted_prompt)
-            result = result.content if hasattr(result, "content") else result
-        elif hasattr(self, "_use_llm_chain") and self._use_llm_chain:
-            result = self.qa_chain.run(context=context_text, question=query)
-        else:
-            result = self.qa_chain.run(input_documents=langchain_docs, question=query)
+        if conversation_history:
+            recent = self._format_conversation_for_prompt(conversation_history)
+            context_text = (
+                "Recent conversation (for context):\n" + recent + "\n\n" + context_text
+            )
+        formatted_prompt = self.prompt_template.format(context=context_text, question=query)
+        result = self.llm.invoke(formatted_prompt)
+        result = result.content if hasattr(result, "content") else result
         _, filtered_response = self.guard_rails.validate_response(result)
         return filtered_response
 
@@ -167,7 +150,7 @@ Reply with only one word: reserve, show_reservations, or general."""
     def classify_intent(self, user_input: str) -> str:
         """Use LLM to classify user intent as reserve, show_reservations, or general."""
         prompt = self.INTENT_PROMPT.format(user_input=user_input)
-        llm = getattr(self, "llm", None) or self.llm_provider.get_llm()
+        llm = self.llm
         result = llm.invoke(prompt)
         text = (result.content if hasattr(result, "content") else str(result)).strip().lower()
         for word in text.replace("\n", " ").split():

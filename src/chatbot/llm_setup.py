@@ -25,13 +25,23 @@ class LLMProvider:
 
     def _initialize_llm(self):
         try:
-            self.llm = GPT4All(model=self.model_path)
+            self.llm = GPT4All(
+                model=self.model_path,
+                verbose=False,
+                n_predict=self.max_tokens,
+                temp=self.temperature,
+            )
             if hasattr(self.llm, "n_ctx"):
                 self.llm.n_ctx = self.max_tokens
             if hasattr(self.llm, "temperature"):
                 self.llm.temperature = self.temperature
         except Exception:
-            self.llm = GPT4All(model=self.model_path)
+            self.llm = GPT4All(
+                model=self.model_path,
+                verbose=False,
+                n_predict=self.max_tokens,
+                temp=self.temperature,
+            )
 
     def get_llm(self):
         """Return the underlying LangChain LLM instance."""
