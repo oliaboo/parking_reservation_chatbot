@@ -24,6 +24,9 @@ class SensitiveDataFilter:
         self.ner_pipeline = None
         if TRANSFORMERS_AVAILABLE and pipeline is not None:
             try:
+                from transformers.utils import logging as transformers_logging
+
+                transformers_logging.set_verbosity_error()
                 self.ner_pipeline = pipeline(
                     "ner", model="dslim/bert-base-NER", aggregation_strategy="simple"
                 )

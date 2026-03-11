@@ -2,6 +2,14 @@
 
 Chatbot for parking information and reservations (RAG + LangGraph). Identifies users by nickname, stores reservations in SQLite, uses FAISS with content from `rag_data/parking_info.txt`.
 
+> **Want a high-level overview?** See **[docs/SYSTEM_SUMMARY.md](docs/SYSTEM_SUMMARY.md)** for what the system does, how user interaction works (chat, reserve, show reservations), and a concise technical overview (data, RAG, guardrails, evaluation).
+
+### Screenshot
+
+The image below shows the launched app and a sample interaction with the chatbot.
+
+![Screenshot of the launched app and interaction with the chatbot](docs/images/example_chatbot_run.png)
+
 ## Setup
 
 ### 1. Create and use a virtual environment
@@ -85,7 +93,8 @@ Use `--remove-index` to delete the FAISS index files after the run (`rag_data/fa
 
 Technical docs are in the **`docs/`** folder:
 
-- **[docs/README.md](docs/README.md)** — Index and overview
+- **[docs/SYSTEM_SUMMARY.md](docs/SYSTEM_SUMMARY.md)** — **Start here for general info:** what the system does, how users interact (chat, reserve, show reservations), and technical overview (data, RAG, guardrails, evaluation)
+- **[docs/INDEX.md](docs/INDEX.md)** — Index and overview
 - **[docs/DATA_FLOW.md](docs/DATA_FLOW.md)** — End-to-end data flow (startup, chat, RAG, reservations, DB)
 - **[docs/CODE_STRUCTURE.md](docs/CODE_STRUCTURE.md)** — Project layout and how each module is used
 - **[docs/TESTING_GUARDRAILS.md](docs/TESTING_GUARDRAILS.md)** — How to test guardrails

@@ -4,6 +4,28 @@ Structured overview of the Parking Reservation Chatbot: data storages, data flow
 
 ---
 
+## Overview: what the system does and how users interact
+
+**Task**  
+The system is a **parking reservation chatbot**: it helps users get **information** about a parking lot (location, hours, prices, booking rules, contact) and **make or view reservations** by date. Users are identified by **nickname**; reservations are stored in a database (one row per reserved day).
+
+**How interaction looks**
+
+1. **Start** — You run `python run.py`. The app asks for your **nickname** (e.g. `alice`, `bob`). Only nicknames that exist in the users table are accepted, so you must use a registered nickname.
+2. **Chat loop** — You type messages; the chatbot replies in plain text. You can:
+   - **Ask general questions** — e.g. “What are the opening hours?”, “How much does parking cost?” The system uses **RAG**: it finds relevant text from a parking info document and current DB data (prices, hours), then an LLM (GPT4All) generates an answer.
+   - **Make a reservation** — Say something like “I want to reserve” or “book a spot”; when prompted, give a **date** in `YYYY-MM-DD` or a range (e.g. `2025-03-10 - 2025-03-12`). The system checks availability and writes one reservation per day.
+   - **Show my reservations** — Say “show my reservations” (or similar); you get a list of your reserved dates with no LLM call.
+3. **Exit** — Type `quit`, `exit`, or `bye` to end the session.
+
+**Safety (guardrails)**  
+Before answering general questions, the system checks the user message for **sensitive data** (e.g. email, SSN, credit card, phone). If found, it refuses to process the query and asks the user to rephrase. Reservation flows allow dates/names but still block SSN and card data. LLM responses are also checked and redacted if needed.
+
+**Tech in one sentence**  
+A single LangGraph node receives every message; it runs guardrails, then either classifies intent (reserve / show_reservations / general) and delegates to the reservation handler or RAG, or—if the user is already in a reservation—handles the next step (e.g. date input). All dynamic data (users, reservations, availability, prices, hours) lives in one SQLite DB; RAG uses a FAISS index over a static parking info file plus DB data for context.
+
+---
+
 ## 1. Data storages
 
 | Storage | Location | Role |
@@ -188,12 +210,12 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-  DS[eval_dataset.py\nEvalItem, DEFAULT_EVAL_DATASET] --> EV[RAGEvaluator]
+  DS["eval_dataset.py, EvalItem, DEFAULT_EVAL_DATASET"] --> EV[RAGEvaluator]
   VS[VectorStore] --> EV
   EV --> RET[run_retrieval_evaluation]
   EV --> PERF[run_performance_test]
-  RET --> R[Recall@K]
-  RET --> P[Precision@K]
+  RET --> R["Recall@K"]
+  RET --> P["Precision@K"]
   RET --> L[retrieval latency]
   PERF --> L
 ```

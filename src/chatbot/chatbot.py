@@ -1,13 +1,19 @@
 """Main chatbot implementation using LangGraph"""
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, StateGraph, add_messages
 
 from .rag_system import RAGSystem
 from .reservation_handler import ReservationHandler
+
+
+class ChatState(TypedDict):
+    """Graph state: messages list with append reducer."""
+
+    messages: Annotated[list, add_messages]
 
 
 class ParkingChatbot:
@@ -17,7 +23,7 @@ class ParkingChatbot:
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
-        workflow = StateGraph(Dict)
+        workflow = StateGraph(ChatState)
         workflow.add_node("handle_general_query", self._handle_general_query)
         workflow.set_entry_point("handle_general_query")
         workflow.add_edge("handle_general_query", END)

@@ -74,8 +74,26 @@ def setup_logging():
         logger.addHandler(file_handler)
 
 
+def _suppress_hf_and_transformers_output():
+    """Suppress Hugging Face / transformers progress bars and warnings during model loads."""
+    try:
+        from transformers.utils import logging as transformers_logging
+
+        transformers_logging.set_verbosity_error()
+        transformers_logging.disable_progress_bar()
+    except Exception:
+        pass
+    try:
+        from huggingface_hub.utils import logging as hf_logging
+
+        hf_logging.set_verbosity_error()
+    except Exception:
+        pass
+
+
 def initialize_system(nickname: str):
     """Initialize all system components and set current user by nickname."""
+    _suppress_hf_and_transformers_output()
     logger.info("Initializing parking reservation chatbot...")
     try:
         vector_store = VectorStore(
