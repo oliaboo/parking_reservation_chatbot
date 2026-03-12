@@ -11,6 +11,10 @@ faiss-cpu>=1.7.4
 # Embeddings
 sentence-transformers>=2.7.0
 
+# Admin API (Task 2: human-in-the-loop)
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+
 # Utilities
 python-dotenv>=1.0.0
 pydantic>=2.9.0

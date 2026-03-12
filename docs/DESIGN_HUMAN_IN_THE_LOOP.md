@@ -1,4 +1,4 @@
-# Task 2: Code design — Admin escalation (REST, user waits in chat)
+# Task 2: Implementation of Human-in-the-Loop Agent
 
 Flow: first agent collects reservation details → escalate to pending request → admin responds via REST → chat polls until approved/rejected → on approve write to `reservations`.
 
@@ -38,24 +38,19 @@ Keep `reservations` as-is; write to it only when status becomes `approved`.
 
 ## 2. Admin REST API
 
-**Where:** New package `src/admin_api/` (or `src/api/`).
+**Where:** Package `src/admin_api/` — implemented with **FastAPI**.
 
-**Options:**
-
-- **FastAPI** (recommended): small app, same process or separate; both use same DB file.
-- **Flask**: same idea.
+**Stack:** FastAPI app (`src/admin_api/app.py`) served with **uvicorn**. Same DB layer as the chatbot (`src/db/sqlite_db.py`, `get_db()`); both processes use the same `data/parking.db` when run on the same host. For chatbot and admin on different VMs, the DB must be shared (e.g. network-mounted SQLite file or a central DB server).
 
 **Endpoints:**
 
 | Method | Path | Purpose |
 |--------|------|--------|
-| GET | `/requests` | List all requests (e.g. filter `?status=pending`). Response: `[{ "id", "nickname", "dates", "status", "created_at" }, ...]`. |
+| GET | `/requests` | List all requests (optional query `?status=pending` \| `approved` \| `rejected`). Response: `[{ "id", "nickname", "dates", "status", "created_at", "updated_at" }, ...]`. |
 | GET | `/requests/{request_id}` | Get one request (for admin UI or polling). |
-| PATCH | `/requests/{request_id}` | Body: `{ "status": "approved" \| "rejected" }`. Update DB, return 200. |
+| PATCH | `/requests/{request_id}` | Body: `{ "status": "approved" \| "rejected" }`. Update DB, return 200; 404 if not found, 409 if request is no longer pending. |
 
-**Run:** Either same process as chat (e.g. run API in a thread from `run.py`) or separate process (e.g. `uvicorn admin_api.app:app`). Both read/write the same `data/parking.db` (and thus same `reservation_requests` table).
-
-**Dependencies:** Add `fastapi` and `uvicorn` (or `flask`) to `requirements.txt` / `pyproject.toml`.
+**Run:** Separate process: `PYTHONPATH=. python run_admin_api.py` or `uvicorn src.admin_api.app:app --host 0.0.0.0 --port 8000`. Requires `fastapi` and `uvicorn[standard]` in `requirements.txt`.
 
 ---
 
@@ -140,7 +135,7 @@ User: "2025-03-10 - 2025-03-11"
 
 ---
 
-## 7. File layout (suggested)
+## 7. File layout
 
 ```text
 src/

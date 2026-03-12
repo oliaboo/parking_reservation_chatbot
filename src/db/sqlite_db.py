@@ -4,7 +4,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "parking.db"
 
@@ -189,6 +189,67 @@ class SQLiteDB:
             except (json.JSONDecodeError, TypeError):
                 pass
             return None
+
+    def get_reservation_request(self, request_id: str) -> Optional[Dict[str, Any]]:
+        """Return one request as dict with id, nickname, dates, status, created_at, updated_at, or None."""
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT id, nickname, dates_json, status, created_at, updated_at FROM reservation_requests WHERE id = ?",
+                (request_id.strip(),),
+            ).fetchone()
+            if not row:
+                return None
+            id_, nickname, dates_json, st, created_at, updated_at = row
+            dates: List[str] = []
+            try:
+                parsed = json.loads(dates_json)
+                if isinstance(parsed, list) and all(isinstance(d, str) for d in parsed):
+                    dates = parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+            return {
+                "id": str(id_),
+                "nickname": nickname,
+                "dates": dates,
+                "status": st,
+                "created_at": created_at,
+                "updated_at": updated_at,
+            }
+
+    def list_reservation_requests(
+        self,
+        status: Optional[Literal["pending", "approved", "rejected"]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return list of requests as dicts with id, nickname, dates, status, created_at, updated_at."""
+        with self._get_conn() as conn:
+            if status is not None:
+                rows = conn.execute(
+                    "SELECT id, nickname, dates_json, status, created_at, updated_at FROM reservation_requests WHERE status = ? ORDER BY created_at DESC",
+                    (status,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, nickname, dates_json, status, created_at, updated_at FROM reservation_requests ORDER BY created_at DESC"
+                ).fetchall()
+            out = []
+            for row in rows:
+                id_, nickname, dates_json, st, created_at, updated_at = row
+                dates: List[str] = []
+                try:
+                    parsed = json.loads(dates_json)
+                    if isinstance(parsed, list) and all(isinstance(d, str) for d in parsed):
+                        dates = parsed
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                out.append({
+                    "id": str(id_),
+                    "nickname": nickname,
+                    "dates": dates,
+                    "status": st,
+                    "created_at": created_at,
+                    "updated_at": updated_at,
+                })
+            return out
 
 
 _db: Optional[SQLiteDB] = None
