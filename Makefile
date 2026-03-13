@@ -4,7 +4,7 @@
 PYTHONPATH := $(CURDIR)
 export PYTHONPATH
 
-.PHONY: tests lint evaluation run
+.PHONY: tests lint evaluation evaluation_report_cosine evaluation_report_l2 run_chatbot run_admin run_admin_api
 
 tests:
 	pytest tests/ -v
@@ -22,5 +22,11 @@ evaluation_report_cosine:
 evaluation_report_l2:
 	python run_evaluation.py -o evaluation_report_l2.txt --remove-index
 
-run:
-	python run.py
+run_chatbot:
+	python run_chatbot_agent.py
+
+run_admin:
+	python run_admin_console_agent.py
+
+run_admin_api:
+	python run_admin_api.py

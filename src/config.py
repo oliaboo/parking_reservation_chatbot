@@ -14,7 +14,7 @@ def _get_project_root() -> Path:
         raise SystemExit(
             "PYTHONPATH must be set to the project root.\n"
             "Example: export PYTHONPATH=/path/to/parking_reservation_chatbot\n"
-            "Then run: python run.py (or pytest, etc.)"
+            "Then run: python run_chatbot_agent.py (or pytest, etc.)"
         )
     for p in pythonpath.split(os.pathsep):
         p = p.strip()
@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     # Chatbot Configuration
     chatbot_name: str = os.getenv("CHATBOT_NAME", "Parking Assistant")
     retrieval_k: int = int(os.getenv("RETRIEVAL_K", "5"))
+
+    # Admin API. chatbot uses HTTP to create/poll requests.
+    admin_api_base_url: str = os.getenv("ADMIN_API_BASE_URL", "").rstrip("/")
 
     class Config:
         env_file = ".env"

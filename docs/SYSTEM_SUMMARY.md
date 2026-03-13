@@ -11,7 +11,7 @@ The system is a **parking reservation chatbot**: it helps users get **informatio
 
 **How interaction looks**
 
-1. **Start** — You run `python run.py`. The app asks for your **nickname** (e.g. `alice`, `bob`). Only nicknames that exist in the users table are accepted, so you must use a registered nickname.
+1. **Start** — You run `python run_chatbot_agent.py`. The app asks for your **nickname** (e.g. `alice`, `bob`). Only nicknames that exist in the users table are accepted, so you must use a registered nickname.
 2. **Chat loop** — You type messages; the chatbot replies in plain text. You can:
    - **Ask general questions** — e.g. “What are the opening hours?”, “How much does parking cost?” The system uses **RAG**: it finds relevant text from a parking info document and current DB data (prices, hours), then an LLM (GPT4All) generates an answer. The **last 10 messages** (user + assistant) from the general-query path are kept and passed into the RAG prompt as conversation context so follow-up questions can be answered with memory.
    - **Make a reservation** — Say something like “I want to reserve” or “book a spot”; when prompted, give a **date** in `YYYY-MM-DD` or a range (e.g. `2025-03-10 - 2025-03-12`). The system checks availability and writes one reservation per day.
@@ -44,7 +44,7 @@ A single LangGraph node receives every message; it runs guardrails, then either 
 
 **Who reads/writes**
 
-- **run.py (startup):** reads `users`.
+- **run_chatbot_agent.py (startup):** reads `users`.
 - **RAGSystem:** reads `prices`, `working_hours`; writes nothing.
 - **ReservationHandler:** reads `availability`; writes `reservations`.
 - **Show reservations:** reads `reservations` by nickname.
@@ -68,7 +68,7 @@ flowchart TB
 
 ## 2. Data flow
 
-**Startup (run.py)**
+**Startup (run_chatbot_agent.py)**
 
 1. Project root on `sys.path`, `chdir` to project root; `setup_logging()`.
 2. `get_db()` → SQLiteDB singleton (`data/parking.db`).
@@ -80,7 +80,7 @@ flowchart TB
 1. User input → `chatbot.chat(user_input, conversation_history)`.
 2. State = `{messages: history + HumanMessage(user_input)}`; `graph.invoke(state)`.
 3. **handle_general_query** is always the single graph node: it runs first, then delegates internally.
-4. Handler appends AIMessage → END; last AI message returned to run.py; response printed and appended to history.
+4. Handler appends AIMessage → END; last AI message returned to run_chatbot_agent.py; response printed and appended to history.
 
 **Intent routing (inside handle_general_query)**
 
@@ -99,7 +99,7 @@ flowchart TB
 ```mermaid
 flowchart TB
   subgraph startup["Startup"]
-    R[run.py] --> G[get_db]
+    R[run_chatbot_agent.py] --> G[get_db]
     R --> N[nickname loop]
     N --> I[initialize_system]
     I --> VS[VectorStore]

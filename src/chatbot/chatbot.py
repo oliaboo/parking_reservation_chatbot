@@ -1,6 +1,7 @@
 """Main chatbot implementation using LangGraph"""
 
 import re
+import time
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -45,8 +46,8 @@ class ParkingChatbot:
         return False
 
     def _answer_with_rag(self, state: Dict[str, Any], messages: List, user_input: str) -> Dict[str, Any]:
-        """Produce RAG response, append AIMessage, return state. Uses last 10 messages as context."""
-        recent = messages[:-1][-10:]  # Exclude current user message; keep last 10
+        """Produce RAG response, append AIMessage, return state. Uses last 5 messages to stay under model context."""
+        recent = messages[:-1][-5:]  # Exclude current user message; keep last 5 to avoid "context full" (e.g. 2048 tokens)
         try:
             response = self.rag_system.generate_response(
                 user_input, conversation_history=recent if recent else None
@@ -135,9 +136,47 @@ class ParkingChatbot:
         if not self.reservation_handler.get_current_reservation():
             self.reservation_handler.start_reservation()
             response = f"I'll help you make a reservation. {self.reservation_handler.get_next_field_prompt()}"
+            messages.append(AIMessage(content=response))
+            state["messages"] = messages
+            return state
+        result = self.reservation_handler.process_user_input(user_input)
+        success, response = result[0], result[1]
+        pending_request_id = result[2] if len(result) == 3 and result[1] == "pending_approval" else None
+        if pending_request_id:
+            messages.append(
+                AIMessage(content="Request sent to the administrator. Waiting for approval...")
+            )
+            state["messages"] = messages
+            # Poll for admin decision via admin API (no DB fallback)
+            from ..admin_api.client import AdminAPIUnavailableError, get_request_status
+
+            poll_interval = 2
+            timeout_sec = 300
+            start = time.monotonic()
+            while (time.monotonic() - start) < timeout_sec:
+                try:
+                    status = get_request_status(pending_request_id)
+                except AdminAPIUnavailableError as e:
+                    messages.append(AIMessage(content=f"Could not check request status: {e}"))
+                    break
+                if status == "approved":
+                    ok, msg = self.reservation_handler.apply_approved_request(pending_request_id)
+                    messages.append(AIMessage(content=msg))
+                    break
+                if status == "rejected":
+                    messages.append(
+                        AIMessage(content="The administrator declined your request.")
+                    )
+                    break
+                time.sleep(poll_interval)
+            else:
+                messages.append(
+                    AIMessage(
+                        content="No response from administrator in time. Please try again later."
+                    )
+                )
         else:
-            _, response = self.reservation_handler.process_user_input(user_input)
-        messages.append(AIMessage(content=response))
+            messages.append(AIMessage(content=response))
         state["messages"] = messages
         return state
 

@@ -1,6 +1,6 @@
-"""FastAPI app: list and get reservation requests, PATCH to approve/reject."""
+"""FastAPI app: create, list, get reservation requests; PATCH to approve/reject."""
 
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
@@ -10,10 +10,25 @@ from src.db.sqlite_db import get_db
 app = FastAPI(title="Parking reservation admin API", version="0.1.0")
 
 
+class CreateRequestBody(BaseModel):
+    """Body for POST /requests: create a pending reservation request (Agent 1 sends via REST)."""
+
+    nickname: str
+    dates: List[str]
+
+
 class UpdateStatusBody(BaseModel):
     """Body for PATCH /requests/{id}: set status to approved or rejected."""
 
     status: Literal["approved", "rejected"]
+
+
+@app.post("/requests")
+def create_request(body: CreateRequestBody):
+    """Create a pending reservation request. Returns request_id for polling (Variant 1: Agent 1 sends via REST)."""
+    db = get_db()
+    request_id = db.create_pending_request(body.nickname, body.dates)
+    return {"request_id": request_id}
 
 
 @app.get("/requests")

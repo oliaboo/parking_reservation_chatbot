@@ -1,8 +1,8 @@
-"""Reservation handling: collect preferred date or date range, check availability, save to SQLite."""
+"""Reservation handling: collect date/range, check availability, escalate to admin or save to SQLite."""
 
 import re
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from ..db.sqlite_db import SQLiteDB
 
@@ -140,8 +140,11 @@ class ReservationHandler:
         f = self.get_current_field()
         return self.FIELD_PROMPTS.get(f, f"Please provide {f}") if f else None
 
-    def process_user_input(self, user_input: str) -> Tuple[bool, str]:
-        """Handle date/range input: validate, check availability, add reservations. Return (success, message)."""
+    def process_user_input(
+        self, user_input: str
+    ) -> Union[Tuple[bool, str], Tuple[bool, str, str]]:
+        """Handle date/range input: validate, check availability; escalate to admin (pending request).
+        Returns (success, message) or (True, "pending_approval", request_id) when waiting for admin."""
         if not self._nickname:
             return False, "Please identify yourself first (nickname is required at startup)."
         if not self.current_reservation:
@@ -190,24 +193,40 @@ class ReservationHandler:
             self.current_reservation.reset()
             self.current_field_index = 0
             return False, f"Sorry, no free spaces on: {', '.join(no_space_dates)}. Try other dates."
-        # Add reservation for each date
-        added_count = 0
-        for d in dates_to_reserve:
-            if self.db.add_reservation(self._nickname, d):
-                added_count += 1
+        # Escalate to administrator via admin API (creates pending request; admin approves in admin console)
+        from ..admin_api.client import create_request
+
+        try:
+            request_id = create_request(self._nickname, dates_to_reserve)
+        except Exception as e:
+            return False, f"Could not send request to administrator: {e}"
         self.current_reservation = None
-        if added_count == len(dates_to_reserve):
-            if len(dates_to_reserve) == 1:
-                return True, f"Reservation saved for {dates_to_reserve[0]}. You're all set!"
-            return (
-                True,
-                f"Reservations saved for {dates_to_reserve[0]} to {dates_to_reserve[-1]} ({added_count} days). You're all set!",
-            )
-        return False, "Could not save some reservations. Please try again."
+        return (True, "pending_approval", request_id)
 
     def get_current_reservation(self) -> Optional[ReservationState]:
         """Return the in-progress reservation state, or None."""
         return self.current_reservation
+
+    def apply_approved_request(self, request_id: str) -> Tuple[bool, str]:
+        """After admin approved: load request details, add reservations for each date. Return (success, message)."""
+        from ..admin_api.client import get_pending_request_details
+
+        details = get_pending_request_details(request_id)
+        if not details:
+            return False, "Request not found or already processed."
+        nickname, dates = details
+        added = 0
+        for d in dates:
+            if self.db.add_reservation(nickname, d):
+                added += 1
+        if added == len(dates):
+            if len(dates) == 1:
+                return True, f"Reservation saved for {dates[0]}. You're all set!"
+            return (
+                True,
+                f"Reservations saved for {dates[0]} to {dates[-1]} ({added} days). You're all set!",
+            )
+        return False, "Could not save some reservations. Please try again."
 
     def get_active_reservations(self) -> List[str]:
         """Return list of reserved dates for the current nickname."""

@@ -142,8 +142,16 @@ def test_looks_like_date_accepts_single_and_range():
     assert chatbot._looks_like_date("What are your hours?") is False
 
 
-def test_reservation_in_progress_date_like_goes_to_reservation(temp_db):
-    """When waiting for date, a date-like message goes to reservation without calling classify_intent again."""
+@patch("src.admin_api.client.get_pending_request_details")
+@patch("src.admin_api.client.get_request_status")
+@patch("src.admin_api.client.create_request")
+def test_reservation_in_progress_date_like_goes_to_reservation(
+    mock_create_request, mock_get_status, mock_get_details, temp_db
+):
+    """When waiting for date, a date-like message goes to reservation; API mocks return approved → reservation saved."""
+    mock_create_request.return_value = "req-1"
+    mock_get_status.return_value = "approved"
+    mock_get_details.return_value = ("alice", ["2025-03-15"])
     handler = ReservationHandler(db=temp_db)
     handler.set_nickname("alice")
     mock_rag = MagicMock()
@@ -155,10 +163,10 @@ def test_reservation_in_progress_date_like_goes_to_reservation(temp_db):
     r1 = chatbot.chat("I want to make a reservation")
     assert "date" in r1.lower() or "reservation" in r1.lower()
     history = [HumanMessage(content="I want to make a reservation"), AIMessage(content=r1)]
-    # Send date: should be treated as reservation input (date-like), not trigger classify_intent
+    # Send date: handler creates request, chatbot polls; mock returns approved → apply_approved_request adds reservation
     r2 = chatbot.chat("2025-03-15", conversation_history=history)
     assert mock_rag.classify_intent.call_count == 1
-    assert "2025-03-15" in handler.get_active_reservations() or "2025-03-15" in r2 or "saved" in r2.lower()
+    assert "2025-03-15" in handler.get_active_reservations() or "saved" in r2.lower()
 
 
 def test_reservation_in_progress_show_reservations_clears_and_shows(temp_db):
@@ -261,8 +269,8 @@ def test_rag_second_turn_called_with_conversation_history(temp_db):
     assert conv[1].content == "We have 100 spaces."
 
 
-def test_rag_memory_caps_at_10_messages(temp_db):
-    """When history has more than 10 messages, only the last 10 are passed to generate_response."""
+def test_rag_memory_caps_at_5_messages(temp_db):
+    """When history has more than 5 messages, only the last 5 are passed to generate_response."""
     handler = ReservationHandler(db=temp_db)
     handler.set_nickname("alice")
     mock_rag = MagicMock()
@@ -278,9 +286,9 @@ def test_rag_memory_caps_at_10_messages(temp_db):
     chatbot.chat("Question 6?", conversation_history=history)
     conv = mock_rag.generate_response.call_args[1].get("conversation_history")
     assert conv is not None
-    assert len(conv) == 10
-    # Last 10 of 12: indices 2..11 = Q1, A1, Q2, A2, Q3, A3, Q4, A4, Q5, A5
-    assert conv[0].content == "Question 1"
+    assert len(conv) == 5
+    # Last 5 of 12: A3, Q4, A4, Q5, A5
+    assert conv[0].content == "Answer 3"
     assert conv[-1].content == "Answer 5"
 
 
@@ -300,7 +308,7 @@ def test_rag_format_conversation_includes_user_and_assistant():
     text = mock_rag._format_conversation_for_prompt(messages)
     assert "User: What are the hours?" in text
     assert "Assistant: We are open 9 to 5." in text
-    # Dict format (as from run.py) also supported
+    # Dict format (as from run_chatbot_agent.py) also supported
     dict_messages = [
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi there"},

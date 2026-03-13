@@ -7,7 +7,7 @@ This document describes the end-to-end data flow: from application startup throu
 ## 1. Application startup
 
 ```
-run.py (main)
+run_chatbot_agent.py (main)
     │
     ├─► Set project root on sys.path, chdir to project root
     ├─► setup_logging()
@@ -36,7 +36,7 @@ All of these are created once per run; the same `db` instance is shared by RAG a
 ## 2. Chat loop (per user message)
 
 ```
-User types message  →  run.py: chatbot.chat(user_input, conversation_history)
+User types message  →  run_chatbot_agent.py: chatbot.chat(user_input, conversation_history)
                             │
                             ▼
                     ParkingChatbot.chat()
@@ -74,7 +74,7 @@ The graph has a single node: **handle_general_query**. Every turn runs this node
               └────────────────────┴────────────────────┘
                                    │
                                    ▼
-                            END  →  last AI message returned to run.py
+                            END  →  last AI message returned to run_chatbot_agent.py
 ```
 
 **Intent (LLM-based):**
@@ -139,7 +139,7 @@ Data read: vector store (from file), `prices` and `working_hours` tables. Nothin
 
 | Component            | Reads from DB                    | Writes to DB        |
 |----------------------|----------------------------------|---------------------|
-| run.py (startup)     | users (user_exists)              | —                   |
+| run_chatbot_agent.py (startup)     | users (user_exists)              | —                   |
 | RAGSystem            | prices, working_hours            | —                   |
 | ReservationHandler  | availability (get_free_spaces)   | reservations        |
 | Show reservations    | reservations (by nickname)       | —                   |
@@ -155,6 +155,6 @@ Data read: vector store (from file), `prices` and `working_hours` tables. Nothin
 
 - **Config:** `src/config.py` — `Settings` (pydantic-settings), loads from `.env` and env vars.
 - **Paths:** Model path, DB path (default `data/parking.db`), log file, embedding model name, retrieval_k, guardrails on/off, etc.
-- **run.py** does not pass DB path explicitly; `get_db()` uses default path under project root, so running from project root ensures the same DB file is used everywhere.
+- **run_chatbot_agent.py** does not pass DB path explicitly; `get_db()` uses default path under project root, so running from project root ensures the same DB file is used everywhere.
 
 This is the complete data flow from startup through each user message to the database and back to the user.

@@ -1,4 +1,12 @@
-"""LLM setup using GPT4ALL for local model"""
+"""LLM setup using GPT4ALL for local model.
+
+If you see "Llama: context full, swapping: n_past = 2048, ..." in the console, the
+model's context window is full: the prompt (RAG context + conversation + question)
+exceeds the window (e.g. 2048 tokens). The backend then discards older tokens to make
+room. To reduce this: use fewer conversation turns in the RAG prompt, less retrieved
+context, or set MAX_CONTEXT_LENGTH higher in .env if your model supports a larger
+context (e.g. 4096).
+"""
 
 import os
 from typing import Optional

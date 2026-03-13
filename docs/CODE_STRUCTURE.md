@@ -8,7 +8,7 @@ This document describes the project layout and how each module is used.
 
 ```
 parking_reservation_chatbot/
-├── run.py                 # Entry point: nickname prompt, init, chat loop
+├── run_chatbot_agent.py         # Entry point: nickname prompt, init, chat loop
 ├── data/
 │   └── parking.db         # SQLite DB (users, reservations, prices, working_hours, availability)
 ├── rag_data/
@@ -47,7 +47,7 @@ parking_reservation_chatbot/
 
 ---
 
-## 2. Entry point: run.py
+## 2. Entry point: run_chatbot_agent.py
 
 **Role:** Bootstrap the app and run the interactive chat.
 
@@ -69,7 +69,7 @@ parking_reservation_chatbot/
 **Role:** Central settings from environment and `.env`.
 
 - **Settings:** Model path, temperature, max tokens, `use_mock_db` (FAISS backend), embedding model name, guardrails enabled/threshold, log level/file, chatbot name, retrieval_k, etc.
-- **Usage:** Imported as `settings` everywhere (run.py, and inside components that need paths or flags). No direct DB or chat logic.
+- **Usage:** Imported as `settings` everywhere (run_chatbot_agent.py, and inside components that need paths or flags). No direct DB or chat logic.
 
 ---
 
@@ -177,7 +177,7 @@ parking_reservation_chatbot/
 
 ## 8. How components connect
 
-- **run.py** → get_db, initialize_system (VectorStore, GuardRails, LLMProvider, RAGSystem(db), ReservationHandler(db), ParkingChatbot(rag_system, reservation_handler)).
+- **run_chatbot_agent.py** → get_db, initialize_system (VectorStore, GuardRails, LLMProvider, RAGSystem(db), ReservationHandler(db), ParkingChatbot(rag_system, reservation_handler)).
 - **ParkingChatbot** → RAGSystem (general answers), ReservationHandler (reservations and show reservations).
 - **RAGSystem** → VectorStore (parking_info.txt), LLMProvider (local LLM), GuardRails, SQLiteDB (prices, working_hours).
 - **ReservationHandler** → SQLiteDB (availability, reservations).

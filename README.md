@@ -46,7 +46,7 @@ export PYTHONPATH=/path/to/parking_reservation_chatbot
 From the **project root**:
 
 ```bash
-python run.py
+python run_chatbot_agent.py
 ```
 
 Enter a valid nickname (e.g. `alice`, `bob`) when prompted, then chat: ask for info, say "reserve" and give a date (YYYY-MM-DD), or "show my reservations".

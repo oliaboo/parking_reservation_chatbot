@@ -44,6 +44,23 @@ def client(temp_db):
         db_mod._db = None
 
 
+def test_post_requests(client):
+    """POST /requests creates a pending request and returns request_id (Variant 1: Agent 1 sends via REST)."""
+    r = client.post(
+        "/requests",
+        json={"nickname": "alice", "dates": ["2025-03-10", "2025-03-11"]},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "request_id" in body
+    assert body["request_id"].isdigit()
+    r2 = client.get(f"/requests/{body['request_id']}")
+    assert r2.status_code == 200
+    assert r2.json()["nickname"] == "alice"
+    assert r2.json()["dates"] == ["2025-03-10", "2025-03-11"]
+    assert r2.json()["status"] == "pending"
+
+
 def test_list_requests_empty(client):
     """GET /requests returns empty list when no requests."""
     r = client.get("/requests")

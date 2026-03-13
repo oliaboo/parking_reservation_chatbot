@@ -5,6 +5,7 @@ import sqlite3
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -65,13 +66,20 @@ def test_handler_requires_nickname(temp_db):
     assert "nickname" in msg.lower() or "identify" in msg.lower()
 
 
-def test_handler_full_reservation_flow(handler):
-    """Start reservation, provide date, should save and return success."""
+@patch("src.admin_api.client.create_request")
+def test_handler_full_reservation_flow(mock_create_request, handler):
+    """Start reservation, provide date: handler escalates to admin (create_request), returns pending_approval."""
+    mock_create_request.return_value = "req-001"
     handler.start_reservation()
-    ok, msg = handler.process_user_input("2025-03-10")
+    result = handler.process_user_input("2025-03-10")
+    assert len(result) == 3
+    ok, msg, request_id = result[0], result[1], result[2]
     assert ok is True
-    assert "2025-03-10" in msg or "saved" in msg.lower()
-    assert "2025-03-10" in handler.get_active_reservations()
+    assert msg == "pending_approval"
+    assert request_id == "req-001"
+    mock_create_request.assert_called_once_with("alice", ["2025-03-10"])
+    # Reservations are only added after admin approval (apply_approved_request), not here
+    assert "2025-03-10" not in handler.get_active_reservations()
 
 
 def test_parse_date_range():
@@ -93,17 +101,19 @@ def test_date_range_to_list():
     assert _date_range_to_list("2025-03-10", "2025-03-10") == ["2025-03-10"]
 
 
-def test_handler_date_range_reservation(handler):
-    """Reserving a date range saves one row per day."""
+@patch("src.admin_api.client.create_request")
+def test_handler_date_range_reservation(mock_create_request, handler):
+    """Reserving a date range escalates to admin (create_request) with all dates, returns pending_approval."""
+    mock_create_request.return_value = "req-range-1"
     handler.start_reservation()
-    ok, msg = handler.process_user_input("2025-03-10 - 2025-03-12")
+    result = handler.process_user_input("2025-03-10 - 2025-03-12")
+    assert len(result) == 3
+    ok, msg, request_id = result[0], result[1], result[2]
     assert ok is True
-    assert "saved" in msg.lower()
-    active = handler.get_active_reservations()
-    assert "2025-03-10" in active
-    assert "2025-03-11" in active
-    assert "2025-03-12" in active
-    assert len(active) == 3
+    assert msg == "pending_approval"
+    assert request_id == "req-range-1"
+    mock_create_request.assert_called_once_with("alice", ["2025-03-10", "2025-03-11", "2025-03-12"])
+    assert handler.get_active_reservations() == []
 
 
 def test_handler_rejects_reservation_when_parking_full(handler):
@@ -133,3 +143,17 @@ def test_handler_rejects_range_when_any_day_full(handler):
     assert "no free spaces" in msg.lower()
     assert "2025-03-11" in msg
     assert "2025-03-10" not in handler.get_active_reservations()
+
+
+@patch("src.admin_api.client.get_db")
+def test_apply_approved_request_adds_reservations(mock_get_db, handler):
+    """After admin approval, apply_approved_request loads request and adds reservations to DB."""
+    mock_get_db.return_value = handler.db
+    request_id = handler.db.create_pending_request("alice", ["2025-03-10", "2025-03-11"])
+    ok, msg = handler.apply_approved_request(request_id)
+    assert ok is True
+    assert "saved" in msg.lower()
+    active = handler.get_active_reservations()
+    assert "2025-03-10" in active
+    assert "2025-03-11" in active
+    assert len(active) == 2

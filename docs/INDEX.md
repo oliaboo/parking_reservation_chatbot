@@ -13,7 +13,7 @@ This folder contains technical documentation for the parking reservation chatbot
 
 ## Quick overview
 
-- **Entry point:** `run.py` — sets up path, loads config, asks for nickname, initializes the system, runs the chat loop.
+- **Entry point:** `run_chatbot_agent.py` — sets up path, loads config, asks for nickname, initializes the system, runs the chat loop.
 - **Chat logic:** `src/chatbot/chatbot.py` — LangGraph workflow: single node `handle_general_query` runs every turn; it uses the LLM to classify intent (reserve / show_reservations / general) and then calls the reservation handler, show-reservations handler, or RAG to answer.
 - **Answers:** General questions use **RAG** (vector store from `parking_info.txt` + SQLite prices/hours) and a local LLM (GPT4All).
 - **Reservations:** Date or date range → check availability in SQLite → insert into `reservations` table.
