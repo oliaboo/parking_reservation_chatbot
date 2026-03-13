@@ -108,6 +108,7 @@ def initialize_system(nickname: str):
             model_path=settings.model_path,
             temperature=settings.temperature,
             max_tokens=settings.max_context_length,
+            n_predict=settings.max_tokens_to_generate,
         )
         logger.info("LLM loaded successfully")
     except Exception as e:

@@ -18,7 +18,11 @@ class LLMProvider:
     """GPT4All-backed LLM for local inference."""
 
     def __init__(
-        self, model_path: Optional[str] = None, temperature: float = 0.7, max_tokens: int = 2048
+        self,
+        model_path: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2048,
+        n_predict: Optional[int] = None,
     ) -> None:
         """Load model from model_path (or MODEL_PATH env); raise if file missing."""
         if model_path is None:
@@ -28,28 +32,17 @@ class LLMProvider:
         self.model_path = model_path
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.n_predict = n_predict if n_predict is not None else 150
         self.llm = None
         self._initialize_llm()
 
     def _initialize_llm(self):
-        try:
-            self.llm = GPT4All(
-                model=self.model_path,
-                verbose=False,
-                n_predict=self.max_tokens,
-                temp=self.temperature,
-            )
-            if hasattr(self.llm, "n_ctx"):
-                self.llm.n_ctx = self.max_tokens
-            if hasattr(self.llm, "temperature"):
-                self.llm.temperature = self.temperature
-        except Exception:
-            self.llm = GPT4All(
-                model=self.model_path,
-                verbose=False,
-                n_predict=self.max_tokens,
-                temp=self.temperature,
-            )
+        self.llm = GPT4All(
+            model=self.model_path,
+            verbose=False,
+            n_predict=self.n_predict,
+            temp=self.temperature,
+        )
 
     def get_llm(self):
         """Return the underlying LangChain LLM instance."""

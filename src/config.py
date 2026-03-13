@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     model_type: str = os.getenv("MODEL_TYPE", "gpt4all")
     temperature: float = float(os.getenv("TEMPERATURE", "0.7"))
     max_context_length: int = int(os.getenv("MAX_CONTEXT_LENGTH", "2048"))
+    # Max tokens to generate per call (n_predict). Keep below context so prompt + output fits; 512 avoids "context full" on first call.
+    max_tokens_to_generate: int = int(os.getenv("MAX_TOKENS_TO_GENERATE", "150"))
 
     # Vector store (FAISS over rag_data/parking_info.txt)
     use_mock_db: bool = True  # Use FAISS over parking_info.txt
@@ -77,7 +79,7 @@ class Settings(BaseSettings):
 
     # Chatbot Configuration
     chatbot_name: str = os.getenv("CHATBOT_NAME", "Parking Assistant")
-    retrieval_k: int = int(os.getenv("RETRIEVAL_K", "5"))
+    retrieval_k: int = int(os.getenv("RETRIEVAL_K", "3"))
 
     # Admin API. chatbot uses HTTP to create/poll requests.
     admin_api_base_url: str = os.getenv("ADMIN_API_BASE_URL", "").rstrip("/")

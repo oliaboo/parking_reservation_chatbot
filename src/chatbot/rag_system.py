@@ -36,7 +36,11 @@ class RAGSystem:
             input_variables=["context", "question"],
             template="""You are a helpful parking reservation assistant. Use the following context to answer the user's question.
 
-Rules: Give only the direct answer to the user. Do not describe what the user asked, do not show your reasoning steps, and do not add phrases like "The user wants to know..." or "Please let me know if I can help." If the context doesn't contain enough information, say so briefly.
+Rules:
+- Give only the direct answer in plain text. One or a few short sentences.
+- Do not output code, code blocks, scripts, Python, or any programming. Do not use markdown code fences (```).
+- Do not describe what the user asked, show reasoning, or add phrases like "The user wants to know..." or "Please let me know if I can help."
+- If the context doesn't contain enough information, say so briefly in one sentence.
 
 Context:
 {context}
@@ -109,7 +113,10 @@ Answer:""",
     def generate_response(
         self, query: str, conversation_history: Optional[List[Any]] = None
     ) -> str:
-        """Retrieve context, build prompt (with optional recent conversation), run LLM, validate response."""
+        """
+        Retrieve context, build prompt (with optional recent conversation), run LLM, validate response.
+        conversation_history is not used for local model invocations because of model context limit.
+        """
         documents = self.retrieve_context(query)
         dynamic = self._get_dynamic_context()
         if not documents and not dynamic:
@@ -122,16 +129,31 @@ Answer:""",
         if dynamic:
             context_text = (context_text + "\n\n" + dynamic) if context_text else dynamic
             langchain_docs = langchain_docs + [Document(page_content=dynamic, metadata={})]
-        if conversation_history:
-            recent = self._format_conversation_for_prompt(conversation_history)
-            context_text = (
-                "Recent conversation (for context):\n" + recent + "\n\n" + context_text
-            )
+        
+        # not used for local model invocations.
+        # if conversation_history:
+            # recent = self._format_conversation_for_prompt(conversation_history)
+            # context_text = (
+                # "Recent conversation (for context):\n" + recent + "\n\n" + context_text
+            # )
         formatted_prompt = self.prompt_template.format(context=context_text, question=query)
         result = self.llm.invoke(formatted_prompt)
         result = result.content if hasattr(result, "content") else result
+        result = self._strip_code_from_response(result)
         _, filtered_response = self.guard_rails.validate_response(result)
         return filtered_response
+
+    @staticmethod
+    def _strip_code_from_response(text: str) -> str:
+        """Keep only plain-text answer; drop code blocks and code that the model may append."""
+        if not text or not isinstance(text, str):
+            return text
+        text = text.strip()
+        for marker in ("\n```", "\ndef ", "\nimport ", "\nclass "):
+            idx = text.find(marker)
+            if idx != -1:
+                text = text[:idx]
+        return text.strip()
 
     def get_context_string(self, query: str) -> str:
         """Return concatenated relevant context for the query (no LLM)."""
