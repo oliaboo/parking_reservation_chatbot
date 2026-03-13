@@ -45,9 +45,13 @@ class ParkingChatbot:
             return True
         return False
 
-    def _answer_with_rag(self, state: Dict[str, Any], messages: List, user_input: str) -> Dict[str, Any]:
+    def _answer_with_rag(
+        self, state: Dict[str, Any], messages: List, user_input: str
+    ) -> Dict[str, Any]:
         """Produce RAG response, append AIMessage, return state. Uses last 5 messages to stay under model context."""
-        recent = messages[:-1][-5:]  # Exclude current user message; keep last 5 to avoid "context full" (e.g. 2048 tokens)
+        recent = messages[:-1][
+            -5:
+        ]  # Exclude current user message; keep last 5 to avoid "context full" (e.g. 2048 tokens)
         try:
             response = self.rag_system.generate_response(
                 user_input, conversation_history=recent if recent else None
@@ -73,7 +77,10 @@ class ParkingChatbot:
         )
         if not is_safe:
             messages.append(
-                AIMessage(content=error_msg or "Query contains potentially sensitive information. Please rephrase.")
+                AIMessage(
+                    content=error_msg
+                    or "Query contains potentially sensitive information. Please rephrase."
+                )
             )
             state["messages"] = messages
             return state
@@ -140,8 +147,10 @@ class ParkingChatbot:
             state["messages"] = messages
             return state
         result = self.reservation_handler.process_user_input(user_input)
-        success, response = result[0], result[1]
-        pending_request_id = result[2] if len(result) == 3 and result[1] == "pending_approval" else None
+        _, response = result[0], result[1]
+        pending_request_id = (
+            result[2] if len(result) == 3 and result[1] == "pending_approval" else None
+        )
         if pending_request_id:
             messages.append(
                 AIMessage(content="Request sent to the administrator. Waiting for approval...")
@@ -164,9 +173,7 @@ class ParkingChatbot:
                     messages.append(AIMessage(content=msg))
                     break
                 if status == "rejected":
-                    messages.append(
-                        AIMessage(content="The administrator declined your request.")
-                    )
+                    messages.append(AIMessage(content="The administrator declined your request."))
                     break
                 time.sleep(poll_interval)
             else:

@@ -4,7 +4,6 @@ Set PYTHONPATH to the project root so the "src" package is found. Paths to data/
 rag_data/, local_models/, and logs/ are resolved relative to the project root.
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -16,7 +15,6 @@ from src.config import settings
 from src.db.sqlite_db import get_db
 from src.guardrails.guard_rails import GuardRails
 from src.vector_db.vector_store import VectorStore
-
 
 # Try to import loguru, fallback to standard logging
 try:

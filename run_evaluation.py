@@ -85,12 +85,15 @@ def main():
         reports_dir.mkdir(parents=True, exist_ok=True)
         out_path = reports_dir / Path(args.output).name
         # Save report with all per-query details (max_per_query=None)
-        full_report_text = format_report(
-            report,
-            include_per_query=True,
-            max_per_query=None,
-            min_score_threshold=evaluator.min_score_threshold,
-        ) + perf_text
+        full_report_text = (
+            format_report(
+                report,
+                include_per_query=True,
+                max_per_query=None,
+                min_score_threshold=evaluator.min_score_threshold,
+            )
+            + perf_text
+        )
         out_path.write_text(full_report_text, encoding="utf-8")
         print(f"Report written to {out_path}")
 

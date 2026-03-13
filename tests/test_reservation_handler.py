@@ -119,9 +119,7 @@ def test_handler_date_range_reservation(mock_create_request, handler):
 def test_handler_rejects_reservation_when_parking_full(handler):
     """When a date has 0 free spaces, reservation is rejected with a clear message."""
     with sqlite3.connect(handler.db.db_path) as conn:
-        conn.execute(
-            "UPDATE availability SET free_spaces = 0 WHERE date = ?", ("2025-03-13",)
-        )
+        conn.execute("UPDATE availability SET free_spaces = 0 WHERE date = ?", ("2025-03-13",))
         conn.commit()
     handler.start_reservation()
     ok, msg = handler.process_user_input("2025-03-13")
@@ -133,9 +131,7 @@ def test_handler_rejects_reservation_when_parking_full(handler):
 def test_handler_rejects_range_when_any_day_full(handler):
     """When any day in a range has 0 free spaces, the whole reservation is rejected."""
     with sqlite3.connect(handler.db.db_path) as conn:
-        conn.execute(
-            "UPDATE availability SET free_spaces = 0 WHERE date = ?", ("2025-03-11",)
-        )
+        conn.execute("UPDATE availability SET free_spaces = 0 WHERE date = ?", ("2025-03-11",))
         conn.commit()
     handler.start_reservation()
     ok, msg = handler.process_user_input("2025-03-10 - 2025-03-12")

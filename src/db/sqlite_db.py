@@ -157,9 +157,7 @@ class SQLiteDB:
                 return s
             return None
 
-    def set_request_status(
-        self, request_id: str, status: Literal["approved", "rejected"]
-    ) -> bool:
+    def set_request_status(self, request_id: str, status: Literal["approved", "rejected"]) -> bool:
         """Update request status; return True if a row was updated."""
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         with self._get_conn() as conn:
@@ -170,9 +168,7 @@ class SQLiteDB:
             conn.commit()
             return cur.rowcount > 0
 
-    def get_pending_request_details(
-        self, request_id: str
-    ) -> Optional[Tuple[str, List[str]]]:
+    def get_pending_request_details(self, request_id: str) -> Optional[Tuple[str, List[str]]]:
         """Return (nickname, dates) for the request, or None if not found."""
         with self._get_conn() as conn:
             row = conn.execute(
@@ -241,14 +237,16 @@ class SQLiteDB:
                         dates = parsed
                 except (json.JSONDecodeError, TypeError):
                     pass
-                out.append({
-                    "id": str(id_),
-                    "nickname": nickname,
-                    "dates": dates,
-                    "status": st,
-                    "created_at": created_at,
-                    "updated_at": updated_at,
-                })
+                out.append(
+                    {
+                        "id": str(id_),
+                        "nickname": nickname,
+                        "dates": dates,
+                        "status": st,
+                        "created_at": created_at,
+                        "updated_at": updated_at,
+                    }
+                )
             return out
 
 

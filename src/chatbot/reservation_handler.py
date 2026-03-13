@@ -140,9 +140,7 @@ class ReservationHandler:
         f = self.get_current_field()
         return self.FIELD_PROMPTS.get(f, f"Please provide {f}") if f else None
 
-    def process_user_input(
-        self, user_input: str
-    ) -> Union[Tuple[bool, str], Tuple[bool, str, str]]:
+    def process_user_input(self, user_input: str) -> Union[Tuple[bool, str], Tuple[bool, str, str]]:
         """Handle date/range input: validate, check availability; escalate to admin (pending request).
         Returns (success, message) or (True, "pending_approval", request_id) when waiting for admin."""
         if not self._nickname:

@@ -10,10 +10,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient
-
 from src.admin_api.app import app
 from src.config import PROJECT_ROOT
-from src.db.sqlite_db import SQLiteDB, get_db
+from src.db.sqlite_db import SQLiteDB
 
 _SEED_PATH = str(PROJECT_ROOT / "data" / "seed_data.json")
 

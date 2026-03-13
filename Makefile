@@ -10,7 +10,7 @@ tests:
 	pytest tests/ -v
 
 lint:
-	ruff check .
+	ruff check --fix .
 	ruff format --check .
 
 evaluation:

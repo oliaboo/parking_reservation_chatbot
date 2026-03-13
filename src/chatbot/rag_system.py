@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.prompts import PromptTemplate
 
 from ..guardrails.guard_rails import GuardRails
@@ -79,7 +79,9 @@ Answer:""",
                     label = "today" if i == 0 else ("tomorrow" if i == 1 else d)
                     availability_lines.append(f"  - {label}: {free} spaces available")
             if availability_lines:
-                parts.append("Available parking spaces (from database):\n" + "\n".join(availability_lines))
+                parts.append(
+                    "Available parking spaces (from database):\n" + "\n".join(availability_lines)
+                )
             prices = self.db.get_prices()
             if prices:
                 lines = []
@@ -129,13 +131,13 @@ Answer:""",
         if dynamic:
             context_text = (context_text + "\n\n" + dynamic) if context_text else dynamic
             langchain_docs = langchain_docs + [Document(page_content=dynamic, metadata={})]
-        
+
         # not used for local model invocations.
         # if conversation_history:
-            # recent = self._format_conversation_for_prompt(conversation_history)
-            # context_text = (
-                # "Recent conversation (for context):\n" + recent + "\n\n" + context_text
-            # )
+        # recent = self._format_conversation_for_prompt(conversation_history)
+        # context_text = (
+        # "Recent conversation (for context):\n" + recent + "\n\n" + context_text
+        # )
         formatted_prompt = self.prompt_template.format(context=context_text, question=query)
         result = self.llm.invoke(formatted_prompt)
         result = result.content if hasattr(result, "content") else result

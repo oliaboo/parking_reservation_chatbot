@@ -124,7 +124,11 @@ def test_chat_booking_intent_goes_to_reservation(temp_db):
     chatbot = ParkingChatbot(rag_system=mock_rag, reservation_handler=handler)
     response = chatbot.chat("I want to make a reservation")
     mock_rag.generate_response.assert_not_called()
-    assert "reservation" in response.lower() or "date" in response.lower() or "help" in response.lower()
+    assert (
+        "reservation" in response.lower()
+        or "date" in response.lower()
+        or "help" in response.lower()
+    )
 
 
 def test_looks_like_date_accepts_single_and_range():
