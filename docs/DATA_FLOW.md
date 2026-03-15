@@ -81,7 +81,7 @@ The graph has a single node: **handle_general_query**. Every turn runs this node
 
 - **reserve** — user wants to make/book a new parking reservation → `_handle_reservation`.
 - **show_reservations** — user wants to see/list their existing reservations → `_handle_show_reservations`.
-- **general** — any other question or statement → RAG: `rag_system.generate_response(user_input, conversation_history=...)` (retrieve context + **last 10 messages** from the general-query path as conversation context + LLM answer).
+- **general** — any other question or statement → RAG: `rag_system.generate_response(user_input)` (retrieve top-k, default 3; no conversation history in prompt; LLM answer).
 
 **Reservation in progress:** If `get_current_reservation()` is not `None` (bot is waiting for a date), the message is first checked: if it **looks like a date** (YYYY-MM-DD or range), it is passed to `_handle_reservation`. Otherwise intent is classified so the user can say "show my reservations", "cancel", or ask a general question; **show_reservations** or **general** clear the current reservation and run that path, so the user is not stuck in the reservation flow.
 
@@ -105,12 +105,10 @@ No RAG, no LLM; direct read from SQLite.
 - If not safe → append error AI message and return.
 - **If no current reservation:** `reservation_handler.start_reservation()` → ask for date (or range).
 - **If current reservation exists:** `reservation_handler.process_user_input(user_input)`:
-  - Parse single date (YYYY-MM-DD) or range (YYYY-MM-DD - YYYY-MM-DD).
-  - For each date: `db.get_free_spaces(date)`; if any date has 0 free spaces, fail and clear reservation.
-  - For each date: `db.add_reservation(nickname, date)` (one row per day).
-  - Clear current reservation, return success message.
-
-Data written: only `reservations` table (nickname + date per row). Read: `availability` (free_spaces per date).
+  - Parse single date (YYYY-MM-DD) or range; for each date `db.get_free_spaces(date)`; if any has 0 free spaces, fail and clear reservation.
+  - **create_request(nickname, dates)** via admin API client (POST `/requests`). No direct add_reservation. Returns `(True, "pending_approval", request_id)`.
+  - Chatbot informs user and **polls** `get_request_status(request_id)` every 2 s (max 300 s). On **approved**: `apply_approved_request(request_id)` (load details from DB, then `db.add_reservation` per date). On **rejected** or timeout: show message.
+- Data written: `reservations` only after admin approval. Read: `availability`, then API for status, then DB for request details on approve.
 
 ---
 
@@ -122,14 +120,13 @@ Data written: only `reservations` table (nickname + date per row). Read: `availa
   - **show_reservations** → call `_handle_show_reservations(state)` (see 4.1).
   - **general** → RAG response:
     1. **Query validation:** `rag_system.guard_rails.validate_query(user_input)` — full sensitive-data check (SSN, card, email, phone). If not safe → return error message, no RAG.
-    2. **Conversation memory:** The **last 10 messages** (user + assistant) from the general-query path are preserved and passed as `conversation_history` into `generate_response` so the LLM can use recent dialogue (only turns that went through this path; reservation/show-reservations turns are not included).
-    3. **Retrieve context:** inside `rag_system.generate_response(user_input, conversation_history=...)`:
-       - **Vector store:** `vector_store.similarity_search(query, k)` → FAISS uses embeddings from `parking_info.txt` chunks.
+    2. **Retrieve context:** inside `rag_system.generate_response(user_input)`:
+       - **Vector store:** `vector_store.similarity_search(query, k)` (k from config, default 3) → FAISS from `parking_info.txt` chunks. No conversation history in the prompt.
        - **Dynamic context:** `db.get_prices()` and `db.get_working_hours()` → formatted text appended to context.
        - **Guardrails:** `guard_rails.filter_retrieved_documents(documents)`.
-    4. **LLM:** Prompt = "Use the following context... Context: [recent conversation if any +] {vector + dynamic}\n\nQuestion: {query}\nAnswer:". LLM generates answer.
-    5. **Response guardrails:** `guard_rails.validate_response(response)` → redact sensitive data in the answer.
-    6. Return filtered response as one AI message.
+    3. **LLM:** Prompt = "Use the following context... Context: {vector + dynamic}\n\nQuestion: {query}\nAnswer:". LLM generates answer.
+    4. **Response guardrails:** `guard_rails.validate_response(response)` → redact sensitive data in the answer.
+    5. Return filtered response as one AI message.
 
 Data read: vector store (from file), `prices` and `working_hours` tables. Nothing written.
 
@@ -139,15 +136,18 @@ Data read: vector store (from file), `prices` and `working_hours` tables. Nothin
 
 | Component            | Reads from DB                    | Writes to DB        |
 |----------------------|----------------------------------|---------------------|
-| run_chatbot_agent.py (startup)     | users (user_exists)              | —                   |
+| run_chatbot_agent.py (startup) | users (user_exists)        | —                   |
 | RAGSystem            | prices, working_hours            | —                   |
-| ReservationHandler  | availability (get_free_spaces)   | reservations        |
-| Show reservations    | reservations (by nickname)       | —                   |
+| ReservationHandler   | availability; request details (on approve) | reservations (only after admin approval) |
+| Admin API            | reservation_requests             | reservation_requests (create, PATCH status) |
+| Show reservations   | reservations (by nickname)       | —                   |
+
+**Admin flow (separate processes):** `run_admin_api.py` serves REST API (create/list/patch requests). `run_admin_console_agent.py` calls GET `/requests` and PATCH `/requests/{id}`; the LLM interprets commands like "approve 15" / "reject 8" and the console applies the corresponding PATCH. See [Design: Human in the loop](DESIGN_HUMAN_IN_THE_LOOP.md).
 
 **Files and storage:**
 
 - **Static text:** `parking_info.txt` → split into chunks → embedded and stored in FAISS index (on disk in rag_data/).
-- **Dynamic data:** SQLite `data/parking.db` — users, reservations, working_hours, prices, availability.
+- **Dynamic data:** SQLite `data/parking.db` — users, reservations, working_hours, prices, availability, reservation_requests.
 
 ---
 

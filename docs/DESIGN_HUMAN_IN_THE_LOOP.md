@@ -30,6 +30,8 @@ Reservation requests are escalated to a human administrator. The chatbot sends a
 
 **Config:** Same DB as the rest of the app. `ADMIN_API_BASE_URL` (e.g. `http://127.0.0.1:8000`) is used by the chatbot and by the admin console.
 
+![Admin API run — server listing or serving requests](images/example_admin_api_run.png)
+
 ---
 
 ## 3. Admin API Client (Chatbot Side)
@@ -49,6 +51,8 @@ Reservation requests are escalated to a human administrator. The chatbot sends a
 **Behaviour:** Loop: fetch pending (GET `/requests?status=pending`), display each request with `request_id`, nickname, and dates, then prompt for input. The administrator types a line such as `approve 15`, `aprov 12`, or `reject 8, 9`. The script uses a **LangChain prompt + LLM** to interpret that line into a list of actions (e.g. approve 15, reject 8, reject 9). The prompt instructs the model to output only a single line in the form `approve N` or `reject N`, comma-separated; typos in the command word are accepted. The LLM output is parsed with a regex; the part after the first `\n\n` is discarded to avoid code or explanation. Parsed actions are then executed by calling the API (PATCH for each id). An LLM instance is created once (via `LLMProvider`, temperature 0) and reused. Commands `refresh` (re-list) and `q` (quit) are handled without the LLM.
 
 **Display:** Each pending request is shown with `request_id`, user nickname, and dates. The number the admin types is the `request_id` (e.g. `approve 15` approves the request with id 15).
+
+![Admin console agent — pending list and approve/reject](images/example_admin_agent_run.png)
 
 ---
 
@@ -88,11 +92,3 @@ User provides dates → chatbot checks availability → client POST `/requests` 
 | `run_chatbot_agent.py` | Chatbot entry (requires ADMIN_API_BASE_URL for escalation) |
 
 Tests cover the API (`tests/test_admin_api.py`) and DB behaviour for reservation requests.
-
----
-
-## 9. Optional Directions (Not Implemented)
-
-- Admin tool could use the DB directly instead of the API; the current design uses the API for both chatbot and console.
-- Notifications (email, messenger) could replace or complement the console; the API and DB design would remain.
-- LangGraph could formalise the escalation and approval steps as graph nodes; existing DB, API, and console could be reused.

@@ -8,41 +8,37 @@ This document describes the project layout and how each module is used.
 
 ```
 parking_reservation_chatbot/
-├── run_chatbot_agent.py         # Entry point: nickname prompt, init, chat loop
+├── run_chatbot_agent.py         # Chatbot entry: nickname, init, chat loop
+├── run_admin_api.py             # Admin REST API (FastAPI, POST/GET/PATCH requests)
+├── run_admin_console_agent.py   # Admin console: list pending, LLM-interpreted approve/reject
 ├── data/
-│   └── parking.db         # SQLite DB (users, reservations, prices, working_hours, availability)
+│   └── parking.db         # SQLite (users, reservations, reservation_requests, prices, working_hours, availability)
 ├── rag_data/
-│   ├── parking_info.txt   # Static content for RAG (location, capacity, booking process, etc.)
+│   ├── parking_info.txt
 │   ├── faiss_parking.index
 │   └── faiss_parking_docs.json
 ├── requirements.txt
 ├── .env / .env_example
-├── local_models/          # Local LLM file (e.g. Meta-Llama-3-8B-Instruct.Q4_0.gguf)
-├── logs/                  # chatbot.log (if logging to file)
-├── docs/                  # Documentation (this folder)
-├── tests/                 # Pytest tests
+├── local_models/
+├── logs/
+├── docs/
+├── tests/
 └── src/
-    ├── __init__.py
-    ├── config.py          # Settings (env, model path, guardrails, etc.)
-    ├── db/                # SQLite layer
-    │   ├── __init__.py
-    │   └── sqlite_db.py   # SQLiteDB, get_db(), schema, seed data
-    ├── vector_db/         # Vector store (FAISS over parking_info.txt)
-    │   ├── __init__.py
-    │   ├── vector_store.py
-    │   ├── embeddings.py
-    │   ├── parking_info_loader.py   # Load and chunk parking_info.txt
-    │   └── faiss_store.py           # FAISS index for similarity search
-    ├── guardrails/        # Sensitive data filtering
-    │   ├── __init__.py
-    │   ├── guard_rails.py
-    │   └── sensitive_data_filter.py
-    └── chatbot/           # Chat logic, RAG, reservation, LLM
-        ├── __init__.py
-        ├── chatbot.py     # ParkingChatbot, LangGraph workflow
-        ├── rag_system.py   # RAGSystem (retrieve + generate)
-        ├── llm_setup.py    # LLMProvider (GPT4All)
-        └── reservation_handler.py
+    ├── config.py
+    ├── db/
+    │   └── sqlite_db.py   # + reservation_requests table and methods
+    ├── admin_api/
+    │   ├── app.py         # FastAPI: POST/GET/PATCH for reservation requests
+    │   └── client.py      # create_request, get_request_status, get_pending_request_details
+    ├── vector_db/
+    │   └── ...            # FAISS over parking_info.txt
+    ├── guardrails/
+    │   └── ...
+    └── chatbot/
+        ├── chatbot.py     # LangGraph; _handle_reservation polls API, apply on approve
+        ├── rag_system.py   # RAG (retrieval k=3, no conversation history in prompt)
+        ├── llm_setup.py
+        └── reservation_handler.py  # create_request via client; apply_approved_request
 ```
 
 ---
@@ -80,12 +76,9 @@ parking_reservation_chatbot/
 **Role:** Single SQLite database for all dynamic data.
 
 - **Path:** Default `data/parking.db` (under project root).
-- **Schema:** `users` (nickname, plates), `reservations` (nickname, date), `working_hours`, `prices`, `availability` (date, free_spaces).
+- **Schema:** `users`, `reservations`, `reservation_requests` (id, nickname, dates_json, status), `working_hours`, `prices`, `availability`.
 - **Seed:** If `users` is empty, inserts sample users (alice, bob, …), working_hours, prices, availability for a few dates.
-- **API:**
-  - `user_exists(nickname)` — used at startup.
-  - `get_free_spaces(date)`, `add_reservation(nickname, date)`, `get_reservations_by_nickname(nickname)` — used by ReservationHandler and show-reservations.
-  - `get_prices()`, `get_working_hours()` — used by RAGSystem for dynamic context.
+- **API:** `user_exists`, `get_free_spaces`, `add_reservation`, `get_reservations_by_nickname`, `get_prices`, `get_working_hours`; for human-in-the-loop: `create_pending_request`, `get_request_status`, `set_request_status`, `get_pending_request_details`, `list_reservation_requests`. Only the admin API writes to `reservation_requests`.
 - **Singleton:** `get_db()` returns one shared `SQLiteDB` instance so RAG and reservations use the same DB.
 
 ---
@@ -134,7 +127,16 @@ parking_reservation_chatbot/
 
 ---
 
-## 7. Chatbot layer: src/chatbot/
+## 7. Admin API: src/admin_api/
+
+**Role:** Single entry point for reservation requests. Chatbot and admin console use it; only the API writes to `reservation_requests`.
+
+- **app.py:** FastAPI: POST `/requests` (create), GET `/requests` (list, optional ?status=), GET `/requests/{id}`, PATCH `/requests/{id}` (status approved/rejected).
+- **client.py:** `create_request(nickname, dates)`, `get_request_status(request_id)`, `get_pending_request_details(request_id)` (from DB). No DB fallback; raises `AdminAPIUnavailableError` if API unreachable.
+
+---
+
+## 8. Chatbot layer: src/chatbot/
 
 **Role:** Orchestrate conversation: every turn goes through handle_general_query, which uses the LLM to classify intent and then calls RAG, reservation logic, or show reservations; return one reply per turn.
 
@@ -142,10 +144,10 @@ parking_reservation_chatbot/
 
 - **ParkingChatbot:** Builds a LangGraph `StateGraph(Dict)` with a single node: **handle_general_query**. Entry → handle_general_query → END. State is `{"messages": [...]}`.
 - **handle_general_query (always runs):** If reservation in progress (waiting for date): if message looks like a date (YYYY-MM-DD or range) → `_handle_reservation(state)`; else classify intent so the user can do something else — **show_reservations** or **general** clear the reservation and run that path, **reserve** → `_handle_reservation`. When not in reservation, classify intent and route to `_handle_reservation`, `_handle_show_reservations`, or `rag_system.generate_response` accordingly.
-- **_handle_reservation** (internal): Validate query with guardrails (reservation mode), then start reservation or process_user_input (date/range) and return the handler message.
+- **_handle_reservation:** On `(True, "pending_approval", request_id)` from handler: inform user, poll get_request_status every 2 s (max 300 s), on approve call apply_approved_request; on reject/timeout show message. Otherwise validate guardrails, start reservation or process_user_input (date/range) and return the handler message.
 - **_handle_show_reservations** (internal): `reservation_handler.get_active_reservations()` → format and return as one AI message.
 - **_looks_like_date(text):** True if input matches a single date (YYYY-MM-DD) or date range; used when in reservation so date-like input goes to `_handle_reservation` and other input is intent-classified (user can cancel, show reservations, or ask a question).
-- **chat(user_input, conversation_history):** Build state with messages, invoke graph, return last AI message content. When the turn is routed to RAG (general), the **last 10 messages** from the history (excluding the current user message) are passed to `generate_response` as conversation context.
+- **chat(user_input, conversation_history):** Build state with messages, invoke graph, return last AI message content. When the turn is routed to RAG (general), the RAG is called without conversation history in the prompt (stateless per query).
 
 **Uses:** RAGSystem (classify_intent + generate_response), ReservationHandler (and thus db for reservations and show-reservations).
 
@@ -153,9 +155,8 @@ parking_reservation_chatbot/
 
 - **RAGSystem:** Combines vector store, LLM, guard rails, and optional `db`. Builds a prompt template (context + question → answer). Uses either a QA chain (if available) or a simple “format prompt + llm.invoke” path.
 - **classify_intent(user_input):** Uses the LLM with a short prompt to classify the user's intent into **reserve**, **show_reservations**, or **general**. Used by the chatbot for routing each turn.
-- **generate_response(query, conversation_history=None):** When answering a general question, the chatbot passes the **last 10 messages** (user + assistant) from the general-query path as `conversation_history`; these are formatted as "User: ... Assistant: ..." and included in the RAG prompt so the LLM can answer follow-ups with memory.
-  1. If `conversation_history` is provided, format it and prepend to context as "Recent conversation (for context): ...".
-  2. Retrieve documents: `vector_store.similarity_search(query, k)` (from parking_info.txt).
+- **generate_response(query, conversation_history=None):** When answering a general question, the chatbot passes Retrieval uses top-k (config, default 3). No conversation history is included in the prompt.
+  1. Retrieve documents: `vector_store.similarity_search(query, k)` (from parking_info.txt).
   3. Append dynamic context: `db.get_prices()`, `db.get_working_hours()` formatted as text.
   4. Validate query with guard_rails; filter retrieved documents.
   5. Build context string, call LLM with prompt.
@@ -170,28 +171,28 @@ parking_reservation_chatbot/
 
 - **ReservationState:** Holds either a single date or a range (start_date, end_date); `get_dates_to_reserve()` returns a list of YYYY-MM-DD strings.
 - **Helpers:** `_parse_single_date`, `_parse_date_range`, `_date_range_to_list` — used to accept "YYYY-MM-DD" or "YYYY-MM-DD - YYYY-MM-DD".
-- **ReservationHandler:** Holds `db`, `current_reservation`, `_nickname`. `start_reservation()` creates a new state and asks for date. `process_user_input(text)` parses date or range, checks `db.get_free_spaces(date)` for each date, then `db.add_reservation(nickname, date)` for each, then clears current reservation and returns success or error message.
-- **Uses:** SQLiteDB only (no RAG, no LLM).
+- **ReservationHandler:** Holds `db`, `current_reservation`, `_nickname`. `start_reservation()` creates a new state and asks for date. `process_user_input(text)` parses date or range, checks `db.get_free_spaces(date)` for each date, then **create_request(nickname, dates)** via admin API client (no direct add_reservation); returns `(True, "pending_approval", request_id)`. **apply_approved_request(request_id)** loads details via client and calls db.add_reservation for each date (used by chatbot after admin approval).
+- **Uses:** SQLiteDB and admin_api.client.
 
 ---
 
-## 8. How components connect
+## 9. How components connect
 
-- **run_chatbot_agent.py** → get_db, initialize_system (VectorStore, GuardRails, LLMProvider, RAGSystem(db), ReservationHandler(db), ParkingChatbot(rag_system, reservation_handler)).
-- **ParkingChatbot** → RAGSystem (general answers), ReservationHandler (reservations and show reservations).
-- **RAGSystem** → VectorStore (parking_info.txt), LLMProvider (local LLM), GuardRails, SQLiteDB (prices, working_hours).
-- **ReservationHandler** → SQLiteDB (availability, reservations).
-- **VectorStore** → EmbeddingGenerator, FAISSStore (reads parking_info.txt, embeds chunks, similarity search).
-
-No circular imports: config and db have no chatbot/vector/guardrail imports; chatbot imports rag and reservation; rag imports vector, guardrails, llm, and db.
+- **run_chatbot_agent.py** → get_db, initialize_system (VectorStore, GuardRails, LLMProvider, RAGSystem, ReservationHandler, ParkingChatbot).
+- **run_admin_console_agent.py** → admin API (GET/PATCH), LLMProvider for interpreting approve/reject commands.
+- **ParkingChatbot** → RAGSystem, ReservationHandler; ReservationHandler uses admin_api.client for create and status.
+- **RAGSystem** → VectorStore, LLMProvider, GuardRails, SQLiteDB (prices, working_hours). Retrieval k=3, no conversation history in prompt.
+- **ReservationHandler** → SQLiteDB (availability, reservations), admin_api.client (create_request, get_pending_request_details).
+- **VectorStore** → EmbeddingGenerator, FAISSStore.
 
 ---
 
-## 9. Tests (tests/)
+## 10. Tests (tests/)
 
-- **test_db.py** — SQLiteDB: user_exists, add_reservation, get_reservations, get_free_spaces.
-- **test_reservation_handler.py** — ReservationState (single/range), ReservationHandler (nickname required, full flow, date range).
-- **test_chatbot.py** — Show reservations returns saved dates; no cross-user leakage.
+- **test_db.py** — SQLiteDB: user_exists, add_reservation, get_reservations, get_free_spaces, reservation_requests methods.
+- **test_admin_api.py** — API endpoints (POST/GET/PATCH).
+- **test_reservation_handler.py** — ReservationState, ReservationHandler (create_request via client, apply_approved_request); admin client mocked.
+- **test_chatbot.py** — Show reservations, RAG, reservation flow with mocked admin API.
 - **test_guardrails.py** — GuardRails: block SSN, card, email, phone; allow safe query and reservation date.
 
 Tests use temp SQLite files and do not start the full app or load the local LLM.

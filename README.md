@@ -1,14 +1,16 @@
 # Parking Reservation Chatbot
 
-Chatbot for parking information and reservations (RAG + LangGraph). Identifies users by nickname, stores reservations in SQLite, uses FAISS with content from `rag_data/parking_info.txt`.
+Chatbot for parking information and reservations (RAG + LangGraph). Identifies users by nickname. Reservations are **escalated to a human administrator**: the chatbot sends a pending request via the admin REST API, the admin approves or rejects in the admin console, and the chatbot then completes or cancels. Uses FAISS over `rag_data/parking_info.txt` for RAG; SQLite for users, reservations, and admin request state.
 
-> **Want a high-level overview?** See **[docs/SYSTEM_SUMMARY.md](docs/SYSTEM_SUMMARY.md)** for what the system does, how user interaction works (chat, reserve, show reservations), and a concise technical overview (data, RAG, guardrails, evaluation).
+> **Want a high-level overview?** See **[docs/SYSTEM_SUMMARY.md](docs/SYSTEM_SUMMARY.md)**. For the human-in-the-loop flow (admin API, admin console, polling), see **[docs/DESIGN_HUMAN_IN_THE_LOOP.md](docs/DESIGN_HUMAN_IN_THE_LOOP.md)**.
 
-### Screenshot
+### Screenshots
 
-The image below shows the launched app and a sample interaction with the chatbot.
-
-![Screenshot of the launched app and interaction with the chatbot](docs/images/example_chatbot_run.png)
+| Component | Description |
+|-----------|-------------|
+| [![Chatbot run](docs/images/example_chatbot_run.png)](docs/images/example_chatbot_run.png) | **Chatbot** — Launched app and sample chat (info, reserve, show reservations). |
+| [![Admin API run](docs/images/example_admin_api_run.png)](docs/images/example_admin_api_run.png) | **Admin API** — REST server running (e.g. uvicorn, listing/serving requests). |
+| [![Admin console agent run](docs/images/example_admin_agent_run.png)](docs/images/example_admin_agent_run.png) | **Admin console** — Pending requests list and approve/reject interaction. |
 
 ## Setup
 
@@ -37,19 +39,13 @@ cp .env_example .env
 
 ## Run
 
-set **PYTHONPATH**:
+Set **PYTHONPATH** to the project root (e.g. `export PYTHONPATH=/path/to/parking_reservation_chatbot`). For **human-in-the-loop** reservations you need all three processes and **ADMIN_API_BASE_URL** (e.g. `http://127.0.0.1:8000`) in `.env`:
 
-```bash
-export PYTHONPATH=/path/to/parking_reservation_chatbot
-```
+1. **Admin API** (from project root): `python run_admin_api.py`
+2. **Admin console** (in another terminal): `PYTHONPATH=. python run_admin_console_agent.py` — list pending requests, type e.g. `approve 15` or `reject 8` to approve/reject by request id.
+3. **Chatbot**: `python run_chatbot_agent.py` — enter nickname, then chat: ask for info, say "reserve" and give a date (YYYY-MM-DD), or "show my reservations". Reservation requests wait for admin approval before being saved.
 
-From the **project root**:
-
-```bash
-python run_chatbot_agent.py
-```
-
-Enter a valid nickname (e.g. `alice`, `bob`) when prompted, then chat: ask for info, say "reserve" and give a date (YYYY-MM-DD), or "show my reservations".
+To run only the chatbot without admin approval, the API must still be reachable if you use reservations (or configure accordingly); see [docs/DESIGN_HUMAN_IN_THE_LOOP.md](docs/DESIGN_HUMAN_IN_THE_LOOP.md).
 
 ## Tests
 
@@ -94,13 +90,15 @@ Use `--remove-index` to delete the FAISS index files after the run (`rag_data/fa
 
 ## Documentation
 
-Technical docs are in the **`docs/`** folder:
+Technical docs are in **`docs/`**:
 
-- **[docs/SYSTEM_SUMMARY.md](docs/SYSTEM_SUMMARY.md)** — **Start here for general info:** what the system does, how users interact (chat, reserve, show reservations), and technical overview (data, RAG, guardrails, evaluation)
-- **[docs/INDEX.md](docs/INDEX.md)** — Index and overview
-- **[docs/DATA_FLOW.md](docs/DATA_FLOW.md)** — End-to-end data flow (startup, chat, RAG, reservations, DB)
-- **[docs/CODE_STRUCTURE.md](docs/CODE_STRUCTURE.md)** — Project layout and how each module is used
-- **[docs/TESTING_GUARDRAILS.md](docs/TESTING_GUARDRAILS.md)** — How to test guardrails
+- **[docs/SYSTEM_SUMMARY.md](docs/SYSTEM_SUMMARY.md)** — What the system does, user interaction (chat, reserve, show reservations), data, RAG, guardrails, evaluation
+- **[docs/DESIGN_HUMAN_IN_THE_LOOP.md](docs/DESIGN_HUMAN_IN_THE_LOOP.md)** — Human-in-the-loop: admin API, admin console (LLM-interpreted commands), escalation and polling
+- **[docs/INDEX.md](docs/INDEX.md)** — Doc index and quick overview
+- **[docs/DATA_FLOW.md](docs/DATA_FLOW.md)** — Startup, chat loop, RAG, reservations, escalation
+- **[docs/CODE_STRUCTURE.md](docs/CODE_STRUCTURE.md)** — Project layout and modules
+- **[docs/TESTING_GUARDRAILS.md](docs/TESTING_GUARDRAILS.md)** — Testing guardrails
+- **[docs/EVALUATION.md](docs/EVALUATION.md)** — RAG evaluation (Recall@K, Precision@K, latency)
 
 ## Requirements
 
