@@ -11,7 +11,7 @@ tests:
 
 lint:
 	ruff check --fix .
-	ruff format --check .
+	ruff format .
 
 evaluation:
 	python run_evaluation.py

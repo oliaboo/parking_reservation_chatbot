@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     retrieval_k: int = int(os.getenv("RETRIEVAL_K", "3"))
 
     # Admin API. chatbot uses HTTP to create/poll requests.
-    admin_api_base_url: str = os.getenv("ADMIN_API_BASE_URL", "").rstrip("/")
+    admin_api_base_url: str = os.getenv("ADMIN_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
     class Config:
         env_file = ".env"

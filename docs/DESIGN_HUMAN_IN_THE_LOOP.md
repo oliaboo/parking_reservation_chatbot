@@ -1,154 +1,98 @@
-# Task 2: Implementation of Human-in-the-Loop Agent
+# Human-in-the-Loop: Reservation Escalation — Design Summary
 
-Flow: first agent collects reservation details → escalate to pending request → admin responds via REST → chat polls until approved/rejected → on approve write to `reservations`.
+Reservation requests are escalated to a human administrator. The chatbot sends a pending request via the admin REST API; the administrator approves or rejects via the admin console; the chatbot learns the outcome by polling the API and, on approval, writes to the `reservations` table.
+
+**Channel:** REST only. The chatbot and the admin console use the same admin API for create and status. There is no DB fallback: if the API is not configured or unreachable, the client raises `AdminAPIUnavailableError`.
+
+**Flow in short:** Chatbot collects nickname and dates, checks availability, then POSTs to `/requests` instead of writing to `reservations`. The API stores a row in `reservation_requests` with status `pending`. The admin console lists pending requests (GET `/requests?status=pending`), the administrator approves or rejects (PATCH `/requests/{id}`). The chatbot polls GET `/requests/{id}` until status is `approved` or `rejected`; on approval it loads request details and calls `add_reservation` for each date.
 
 ---
 
-## 1. Data layer: pending requests
+## 1. Data Layer
 
-**Where:** `src/db/sqlite_db.py` (extend) or a small `src/db/pending_requests.py` that uses the same DB path.
+**Table:** `reservation_requests` in `src/db/sqlite_db.py` (same DB as `reservations`).
 
-**Schema (new table in same DB):**
+**Columns:** `id`, `nickname`, `dates_json`, `status` (`pending` | `approved` | `rejected`), `created_at`, `updated_at`.
 
-```text
-reservation_requests (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  nickname TEXT NOT NULL,
-  dates_json TEXT NOT NULL,        -- e.g. '["2025-03-10","2025-03-11"]'
-  status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'approved' | 'rejected'
-  created_at TEXT NOT NULL,        -- ISO datetime
-  updated_at TEXT                  -- set when status changes
-)
-```
+**Writes:** Only the admin API writes to this table (on POST create and PATCH status). The chatbot never writes to it; it uses the API client. The admin console does not access the DB; it uses the API.
 
-**New API (on SQLiteDB or a PendingRequestStore):**
+**Reads:** The API reads for list/get/update. The chatbot reads status via the API and, after approval, loads `(nickname, dates)` via `get_pending_request_details` from the DB to apply the reservation.
 
-- `create_pending_request(nickname: str, dates: List[str]) -> str`  
-  Insert row, return `request_id` (e.g. str of id).
-- `get_request_status(request_id: str) -> Optional[Literal["pending","approved","rejected"]]`  
-  Return status or None if not found.
-- `set_request_status(request_id: str, status: Literal["approved","rejected"]) -> bool`  
-  Update row and `updated_at`; return True if updated.
-- `get_pending_request_details(request_id: str) -> Optional[Tuple[str, List[str]]]`  
-  Return (nickname, dates) for the request (used when applying approval).
-
-Keep `reservations` as-is; write to it only when status becomes `approved`.
+**Main methods:** `create_pending_request`, `get_request_status`, `set_request_status`, `get_pending_request_details`, `get_reservation_request`, `list_reservation_requests`.
 
 ---
 
 ## 2. Admin REST API
 
-**Where:** Package `src/admin_api/` — implemented with **FastAPI**.
+**Implementation:** `src/admin_api/app.py`. Run with `run_admin_api.py` (e.g. uvicorn on port 8000).
 
-**Stack:** FastAPI app (`src/admin_api/app.py`) served with **uvicorn**. Same DB layer as the chatbot (`src/db/sqlite_db.py`, `get_db()`); both processes use the same `data/parking.db` when run on the same host. For chatbot and admin on different VMs, the DB must be shared (e.g. network-mounted SQLite file or a central DB server).
+**Endpoints:** POST `/requests` (create, returns `request_id`); GET `/requests` (list, optional `?status=`); GET `/requests/{request_id}` (one); PATCH `/requests/{request_id}` (body `{ "status": "approved" | "rejected" }`, 409 if not pending).
 
-**Endpoints:**
-
-| Method | Path | Purpose |
-|--------|------|--------|
-| GET | `/requests` | List all requests (optional query `?status=pending` \| `approved` \| `rejected`). Response: `[{ "id", "nickname", "dates", "status", "created_at", "updated_at" }, ...]`. |
-| GET | `/requests/{request_id}` | Get one request (for admin UI or polling). |
-| PATCH | `/requests/{request_id}` | Body: `{ "status": "approved" \| "rejected" }`. Update DB, return 200; 404 if not found, 409 if request is no longer pending. |
-
-**Run:** Separate process: `PYTHONPATH=. python run_admin_api.py` or `uvicorn src.admin_api.app:app --host 0.0.0.0 --port 8000`. Requires `fastapi` and `uvicorn[standard]` in `requirements.txt`.
+**Config:** Same DB as the rest of the app. `ADMIN_API_BASE_URL` (e.g. `http://127.0.0.1:8000`) is used by the chatbot and by the admin console.
 
 ---
 
-## 3. Second agent (LangChain) — “admin side”
+## 3. Admin API Client (Chatbot Side)
 
-**Where:** e.g. `src/chatbot/admin_agent.py` or `src/admin_agent/`.
+**Module:** `src/admin_api/client.py`.
 
-**Role:**
-
-- **Input:** Reservation payload `{ nickname, dates[] }`.
-- **Output:** Human-readable summary string (for admin UI or future email).
-- No need to “receive” REST response: admin uses REST; the agent only **formats the request** and optionally a “request id” for reference.
-
-**Suggested interface:**
-
-```text
-class AdminRequestAgent:
-    def format_request_for_admin(self, nickname: str, dates: List[str]) -> str
-        # LangChain: prompt + optional LLM to turn payload into a short, clear message.
-        # Fallback: simple template "User {nickname} requests: {dates}."
-```
-
-This agent is called when creating the pending request, so the admin UI (or GET `/requests`) can show a nice message. The actual “sending” is “write to DB + admin sees it via REST.”
+**Functions:** `create_request(nickname, dates)` POSTs to the API and returns `request_id`; `get_request_status(request_id)` GETs status; `get_pending_request_details(request_id)` returns `(nickname, dates)` from the DB (no API endpoint). All create/status calls go through the API; no fallback. `AdminAPIUnavailableError` is raised when the URL is unset or the API is unreachable.
 
 ---
 
-## 4. Escalation and polling (first agent + reservation flow)
+## 4. Admin Console Agent
 
-**Where:** `src/chatbot/reservation_handler.py` and `src/chatbot/chatbot.py`.
+**Script:** `run_admin_console_agent.py`. Console-only; no web UI.
 
-**4.1 ReservationHandler**
+**Role:** Lets the administrator see pending requests and approve or reject them. It uses only the admin API (GET list, PATCH status).
 
-- Add dependency: something that can create a pending request and return its id (e.g. DB or a small `PendingRequestService`).
-- In `process_user_input`, **instead of** calling `self.db.add_reservation(...)` in a loop after availability check:
-  1. Call `create_pending_request(self._nickname, dates_to_reserve)` and get `request_id`.
-  2. Clear `current_reservation` (same as now).
-  3. Return a **special** result so the chatbot knows to poll: e.g. `(True, "pending_approval", request_id)` or a small dataclass `ReservationResult(success, message, pending_request_id=None)`.
+**Behaviour:** Loop: fetch pending (GET `/requests?status=pending`), display each request with `request_id`, nickname, and dates, then prompt for input. The administrator types a line such as `approve 15`, `aprov 12`, or `reject 8, 9`. The script uses a **LangChain prompt + LLM** to interpret that line into a list of actions (e.g. approve 15, reject 8, reject 9). The prompt instructs the model to output only a single line in the form `approve N` or `reject N`, comma-separated; typos in the command word are accepted. The LLM output is parsed with a regex; the part after the first `\n\n` is discarded to avoid code or explanation. Parsed actions are then executed by calling the API (PATCH for each id). An LLM instance is created once (via `LLMProvider`, temperature 0) and reused. Commands `refresh` (re-list) and `q` (quit) are handled without the LLM.
 
-- Add a method the chatbot will use after approval:
-
-  - `apply_approved_request(request_id: str) -> Tuple[bool, str]`  
-    Load (nickname, dates) for that request, call `db.add_reservation` for each date, then update request status to `approved` (or delete/ignore). Return (True, "Reservation saved...") or (False, error).
-
-**4.2 Chatbot (`chatbot.py`) — `_handle_reservation`**
-
-- After `process_user_input`, check if the result is “pending_approval” + `request_id`.
-- If yes:
-  1. Append an AI message like “Request sent to administrator. Waiting for response…”
-  2. **Poll** in a loop: every 2–3 s call `get_request_status(request_id)` (from DB or a thin service). Break when status is `approved` or `rejected` or after timeout (e.g. 2–5 minutes).
-  3. If `approved`: call `reservation_handler.apply_approved_request(request_id)`, then append AI message with the success text.
-  4. If `rejected` or timeout: append AI message “Administrator declined.” or “No response in time. Please try again later.”
-- If not pending (normal success/failure): keep current behavior (append one AI message with success or error).
-
-So the “wait” is implemented in the same synchronous chat turn: poll in `_handle_reservation` until the admin has set status via REST.
+**Display:** Each pending request is shown with `request_id`, user nickname, and dates. The number the admin types is the `request_id` (e.g. `approve 15` approves the request with id 15).
 
 ---
 
-## 5. Wiring and config
+## 5. Chatbot Escalation and Polling
 
-- **run.py (or init):** Build DB (with new table), ReservationHandler, and optionally AdminRequestAgent. Pass a “pending request store” (DB or adapter) into ReservationHandler so it can create and query pending requests.
-- **Config:** Optional: admin API base URL if the chat process calls an HTTP API for status (instead of reading DB directly). Simpler: both chat and admin API use the same DB, so no HTTP from chat to API; only the admin uses the API.
-- **Starting the admin API:** Either a second script `run_admin_api.py` that runs `uvicorn admin_api.app:app --host 0.0.0.0 --port 8000`, or document that the admin runs it separately so they can open GET `/requests` and PATCH to approve/reject.
+**Modules:** `src/chatbot/reservation_handler.py`, `src/chatbot/chatbot.py`.
 
----
+**ReservationHandler:** After availability check, it calls `create_request(nickname, dates)` (client POST) instead of writing to `reservations`. It returns `(True, "pending_approval", request_id)`. When the admin has approved, `apply_approved_request(request_id)` loads details via `get_pending_request_details` and calls `db.add_reservation` for each date.
 
-## 6. Call flow (summary)
-
-```text
-User: "2025-03-10 - 2025-03-11"
-  → handle_general_query → _handle_reservation
-  → reservation_handler.process_user_input("2025-03-10 - 2025-03-11")
-  → availability OK → create_pending_request(nickname, dates) → request_id
-  → return (pending_approval, request_id)
-  → chatbot appends "Request sent. Waiting for administrator..."
-  → loop: get_request_status(request_id) every 2–3 s
-  → [Admin in another terminal/browser: GET /requests, then PATCH /requests/1 {"status":"approved"}]
-  → status becomes "approved"
-  → reservation_handler.apply_approved_request(request_id) → add_reservation for each date
-  → chatbot appends "Reservation saved for 2025-03-10 to 2025-03-11. You're all set!"
-  → state returned to user
-```
+**Chatbot _handle_reservation:** On `(True, "pending_approval", request_id)` it informs the user and polls `get_request_status(request_id)` every 2 seconds (max 300 s). On `approved` it calls `apply_approved_request` and confirms to the user; on `rejected` or timeout it shows the appropriate message. `AdminAPIUnavailableError` during polling is caught and surfaced to the user.
 
 ---
 
-## 7. File layout
+## 6. Configuration and Run Order
 
-```text
-src/
-  db/
-    sqlite_db.py          # add reservation_requests table + create_pending_request, get_request_status, set_request_status, get_pending_request_details
-  admin_api/
-    __init__.py
-    app.py                # FastAPI app: GET/PATCH /requests, uses get_db() and the new methods
-  chatbot/
-    reservation_handler.py # escalation: create_pending_request instead of add_reservation; apply_approved_request
-    chatbot.py            # _handle_reservation: detect pending, poll, then apply or show reject/timeout
-  admin_agent.py (optional)
-    # AdminRequestAgent: format_request_for_admin(nickname, dates) for human-readable text
-```
+**ADMIN_API_BASE_URL** must be set for the chatbot to create and poll requests. Typical order: start the admin API, then the admin console, then the chatbot (all can run on one machine with default URL).
 
-Tests: `tests/test_admin_api.py`, `tests/test_reservation_escalation.py` (mock DB or in-memory SQLite).
+---
+
+## 7. End-to-End Call Flow (Summary)
+
+User provides dates → chatbot checks availability → client POST `/requests` → API creates pending row → chatbot shows “Waiting for approval…” and polls GET `/requests/{id}`. Administrator runs the console, sees the list, types e.g. `approve 15` → LLM interprets → console PATCHes `/requests/15` with `approved`. Chatbot sees status `approved`, calls `apply_approved_request` (DB read for details, then `add_reservation` per date), then tells the user the reservation is saved.
+
+---
+
+## 8. File Layout
+
+| Path | Purpose |
+|------|---------|
+| `src/db/sqlite_db.py` | `reservation_requests` table and related DB methods |
+| `src/admin_api/app.py` | FastAPI: POST/GET/PATCH for requests |
+| `src/admin_api/client.py` | create_request, get_request_status, get_pending_request_details; AdminAPIUnavailableError |
+| `src/chatbot/reservation_handler.py` | create_request after availability; apply_approved_request |
+| `src/chatbot/chatbot.py` | _handle_reservation: pending detection, polling, apply on approve |
+| `run_admin_api.py` | Run the admin API process |
+| `run_admin_console_agent.py` | Console: GET pending, LLM-interpreted input, PATCH approve/reject |
+| `run_chatbot_agent.py` | Chatbot entry (requires ADMIN_API_BASE_URL for escalation) |
+
+Tests cover the API (`tests/test_admin_api.py`) and DB behaviour for reservation requests.
+
+---
+
+## 9. Optional Directions (Not Implemented)
+
+- Admin tool could use the DB directly instead of the API; the current design uses the API for both chatbot and console.
+- Notifications (email, messenger) could replace or complement the console; the API and DB design would remain.
+- LangGraph could formalise the escalation and approval steps as graph nodes; existing DB, API, and console could be reused.
