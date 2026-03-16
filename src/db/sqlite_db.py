@@ -85,6 +85,14 @@ class SQLiteDB:
                 is not None
             )
 
+    def get_plates_by_nickname(self, nickname: str) -> Optional[str]:
+        """Return plates (car number) for the given nickname, or None if not found."""
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT plates FROM users WHERE nickname = ?", (nickname.strip(),)
+            ).fetchone()
+            return row[0] if row else None
+
     def get_free_spaces(self, date: str) -> Optional[int]:
         """Return free_spaces for date, or None if not in availability table."""
         with self._get_conn() as conn:

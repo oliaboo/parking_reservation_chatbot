@@ -13,8 +13,6 @@ import queue
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
-
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client
 from mcp.client.stdio import StdioServerParameters
@@ -35,19 +33,26 @@ _SENTINEL = object()
 
 
 def _make_csv_header() -> str:
-    return "action,request_id,time\n"
+    return "name,car_number,reservation_period,approval_time\n"
 
 
-def _append_line_to_content(existing: str, action: str, request_id: str) -> str:
-    """Return existing content + one new CSV row. Time is UTC ISO."""
-    now = datetime.now(timezone.utc).isoformat()
+def _append_line_to_content(
+    existing: str, name: str, car_number: str, reservation_period: str
+) -> str:
+    """Return existing content + one new CSV row. Approval time is UTC ISO."""
+    approval_time = datetime.now(timezone.utc).isoformat()
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow([action, request_id, now])
+    w.writerow([name, car_number, reservation_period, approval_time])
     return existing.rstrip() + "\n" + buf.getvalue().strip() + "\n"
 
 
-async def _run_one_log(session: ClientSession, action: str, request_id: str) -> None:
+async def _run_one_log(
+    session: ClientSession,
+    name: str,
+    car_number: str,
+    reservation_period: str,
+) -> None:
     """Read CSV, append one row, write back. Uses existing session."""
     file_path = str(LOG_PATH.resolve())
     try:
@@ -63,7 +68,7 @@ async def _run_one_log(session: ClientSession, action: str, request_id: str) -> 
     else:
         existing = _make_csv_header()
 
-    new_content = _append_line_to_content(existing, action, request_id)
+    new_content = _append_line_to_content(existing, name, car_number, reservation_period)
 
     write_result = await session.call_tool(
         "write_file",
@@ -96,9 +101,9 @@ async def _mcp_worker_loop() -> None:
                     item = await loop.run_in_executor(None, _request_queue.get)
                     if item is _SENTINEL:
                         break
-                    action, request_id = item
+                    name, car_number, reservation_period = item
                     try:
-                        await _run_one_log(session, action, request_id)
+                        await _run_one_log(session, name, car_number, reservation_period)
                         _result_queue.put((True, None))
                     except Exception as e:
                         _result_queue.put((False, e))
@@ -144,11 +149,11 @@ def stop_mcp_fs_logger() -> None:
 
 
 def log_reservation_action_via_fs_mcp(
-    action: Literal["approved", "rejected"], request_id: str
+    name: str, car_number: str, reservation_period: str
 ) -> None:
-    """Append one reservation action to CSV. Starts the MCP process on first call; reuses it after that. Raises on error."""
+    """Append one reservation log row to CSV (name, car_number, reservation_period, approval_time). Starts the MCP process on first call; reuses it after that. Raises on error."""
     _ensure_worker_started()
-    _request_queue.put((action, request_id))
+    _request_queue.put((name, car_number, reservation_period))
     ok, err = _result_queue.get(timeout=15)
     if not ok and err is not None:
         raise err

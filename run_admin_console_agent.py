@@ -114,29 +114,40 @@ def interpret_admin_input(
 # ---- Resolve & execute --------------------------------------------------------
 
 
-def _log_reservation_action_to_mcp(action: Literal["approve", "reject"], request_id: str) -> None:
-    """Append approve/reject to CSV via @modelcontextprotocol/server-filesystem (npx). Best-effort; no raise."""
+def _log_reservation_action_to_mcp(
+    name: str, car_number: str, reservation_period: str
+) -> None:
+    """Append reservation log row to CSV via @modelcontextprotocol/server-filesystem (npx). Best-effort; no raise."""
     try:
         from src.mcp_reservation_logger.client_fs import log_reservation_action_via_fs_mcp
 
-        log_reservation_action_via_fs_mcp(
-            "approved" if action == "approve" else "rejected",
-            request_id,
-        )
+        log_reservation_action_via_fs_mcp(name, car_number, reservation_period)
     except Exception as e:
         inner = getattr(e, "exceptions", (e,))
         msg = inner[0] if inner else e
         print(f"  (MCP logger unreachable: {msg})")
 
 
-def _apply_action(action: Literal["approve", "reject"], request_id: str) -> Optional[str]:
+def _apply_action(
+    action: Literal["approve", "reject"],
+    request_id: str,
+    pending: list[dict[str, Any]],
+) -> Optional[str]:
     """Call API for one action. Returns None on success, or error message."""
     try:
         if action == "approve":
             approve_request.invoke({"request_id": request_id})
         else:
             reject_request.invoke({"request_id": request_id})
-        _log_reservation_action_to_mcp(action, request_id)
+        if action == "approve":
+            req = next((r for r in pending if str(r["id"]) == str(request_id)), None)
+            if req:
+                from src.db.sqlite_db import get_db
+
+                name = req.get("nickname", "")
+                car_number = get_db().get_plates_by_nickname(name) or ""
+                reservation_period = ", ".join(req.get("dates") or [])
+                _log_reservation_action_to_mcp(name, car_number, reservation_period)
         return None
     except requests.RequestException as e:
         resp = getattr(e, "response", None)
@@ -145,12 +156,12 @@ def _apply_action(action: Literal["approve", "reject"], request_id: str) -> Opti
         return f"API error for {request_id}: {e}"
 
 
-def execute_actions(actions: ParsedActions) -> None:
+def execute_actions(pending: list[dict[str, Any]], actions: ParsedActions) -> None:
     """Resolve each action to a request id and call the API; print outcome."""
     for action, raw_id in actions:
         if action not in ("approve", "reject") or not raw_id:
             continue
-        msg = _apply_action(action, raw_id)
+        msg = _apply_action(action, raw_id, pending)
         if msg:
             print(f"  {msg}")
         else:
@@ -213,7 +224,7 @@ def main() -> None:
             print("  Unclear command. Try: approve 1, 2 | reject 2 | refresh | q to quit.")
             continue
 
-        execute_actions(actions)
+        execute_actions(pending, actions)
         print()
 
 

@@ -13,25 +13,28 @@ from src.mcp_reservation_logger.client_fs import (
 
 
 def test_make_csv_header():
-    """CSV header is action,request_id,time."""
+    """CSV header is name,car_number,reservation_period,approval_time."""
     from src.mcp_reservation_logger.client_fs import _make_csv_header
 
-    assert _make_csv_header() == "action,request_id,time\n"
+    assert _make_csv_header() == "name,car_number,reservation_period,approval_time\n"
 
 
 def test_append_line_to_content():
-    """_append_line_to_content appends a valid CSV row with UTC time."""
+    """_append_line_to_content appends a valid CSV row with approval_time as UTC ISO."""
     from src.mcp_reservation_logger.client_fs import _append_line_to_content
 
-    existing = "action,request_id,time\n"
-    out = _append_line_to_content(existing, "approved", "15")
+    existing = "name,car_number,reservation_period,approval_time\n"
+    out = _append_line_to_content(
+        existing, "alice", "AB-123", "2025-03-10, 2025-03-11"
+    )
     lines = out.strip().split("\n")
     assert len(lines) == 2
-    assert lines[0] == "action,request_id,time"
+    assert lines[0] == "name,car_number,reservation_period,approval_time"
     row = list(csv.reader(io.StringIO(lines[1])))[0]
-    assert row[0] == "approved"
-    assert row[1] == "15"
-    assert len(row) == 3 and "T" in row[2]  # ISO time
+    assert row[0] == "alice"
+    assert row[1] == "AB-123"
+    assert row[2] == "2025-03-10, 2025-03-11"
+    assert len(row) == 4 and "T" in row[3]  # approval_time ISO
 
 
 def test_client_fs_module_exports():

@@ -72,9 +72,9 @@ Reservation requests are escalated to a human administrator. The chatbot sends a
 
 ### 6.1 MCP Reservation Action Logger
 
-**Purpose:** When the admin console approves or rejects a request, the action is appended to a CSV file for audit/logging using the **open-source** [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) (Node.js). No separate server process: the admin console spawns it via `npx` when needed.
+**Purpose:** When the admin console **approves** a request, the action is appended to a CSV file for audit/logging using the **open-source** [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) (Node.js). Rejections are not logged. No separate server process: the admin console spawns it via `npx` when needed.
 
-**Behaviour:** The console starts the filesystem MCP server **once** (on first approve/reject) via `npx -y @modelcontextprotocol/server-filesystem <reservations_mcp_dir>`, connects over stdio, and reuses that session for every subsequent approve/reject. For each action it calls **read_text_file** then **write_file** to append one row to `reservations_mcp/reservations_log.csv` (columns: **action**, **request_id**, **time** UTC ISO). The server is allowed to access **only** the `reservations_mcp/` directory. The npx process is closed when the console exits. If spawning or MCP fails, the console prints a short message and continues. **Prerequisites:** Node.js and npx. See [MCP_FILESYSTEM_SETUP.md](MCP_FILESYSTEM_SETUP.md).
+**Behaviour:** The console starts the filesystem MCP server **once** (on first approval) via `npx -y @modelcontextprotocol/server-filesystem <reservations_mcp_dir>`, connects over stdio, and reuses that session for every subsequent approval. For each approval it calls **read_text_file** then **write_file** to append one row to `reservations_mcp/reservations_log.csv` (columns: **name** [nickname], **car_number** [plates from users table], **reservation_period** [request dates], **approval_time** UTC ISO). The server is allowed to access **only** the `reservations_mcp/` directory. The npx process is closed when the console exits. If spawning or MCP fails, the console prints a short message and continues. **Prerequisites:** Node.js and npx. See [MCP_FILESYSTEM_SETUP.md](MCP_FILESYSTEM_SETUP.md).
 
 ---
 
@@ -94,7 +94,7 @@ User provides dates → chatbot checks availability → client POST `/requests` 
 | `src/chatbot/reservation_handler.py` | create_request after availability; apply_approved_request |
 | `src/chatbot/chatbot.py` | _handle_reservation: pending detection, polling, apply on approve |
 | `run_admin_api.py` | Run the admin API process |
-| `run_admin_console_agent.py` | Console: GET pending, LLM-interpreted input, PATCH approve/reject; logs via filesystem MCP on each action |
+| `run_admin_console_agent.py` | Console: GET pending, LLM-interpreted input, PATCH approve/reject; logs via filesystem MCP on each **approval** only |
 | `run_chatbot_agent.py` | Chatbot entry (requires ADMIN_API_BASE_URL for escalation) |
 | `src/mcp_reservation_logger/client_fs.py` | Spawns @modelcontextprotocol/server-filesystem (npx), read_text_file + write_file to append CSV |
 

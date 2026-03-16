@@ -42,7 +42,7 @@ cp .env_example .env
 Set **PYTHONPATH** to the project root (e.g. `export PYTHONPATH=/path/to/parking_reservation_chatbot`). For **human-in-the-loop** reservations you need the following processes and **ADMIN_API_BASE_URL** (e.g. `http://127.0.0.1:8000`) in `.env`:
 
 1. **Admin API** (from project root): `python run_admin_api.py` (or `make run_admin_api`)
-2. **Admin console** (in another terminal): `python run_admin_console_agent.py` (or `make run_admin`) — list pending requests, type e.g. `approve 15` or `reject 8` to approve/reject by request id. Each approve/reject is appended to `reservations_mcp/reservations_log.csv` using the **open-source MCP filesystem server** ([@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem)); requires **Node.js/npx**. See **[docs/MCP_FILESYSTEM_SETUP.md](docs/MCP_FILESYSTEM_SETUP.md)** for setup and prerequisites.
+2. **Admin console** (in another terminal): `python run_admin_console_agent.py` (or `make run_admin`) — list pending requests, type e.g. `approve 15` or `reject 8` to approve/reject by request id. Each **approval** is appended to `reservations_mcp/reservations_log.csv` (rejections are not logged) using the **open-source MCP filesystem server** ([@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem)); requires **Node.js/npx**. See **[docs/MCP_FILESYSTEM_SETUP.md](docs/MCP_FILESYSTEM_SETUP.md)** for setup and prerequisites.
 3. **Chatbot**: `python run_chatbot_agent.py` (or `make run_chatbot`) — enter nickname, then chat: ask for info, say "reserve" and give a date (YYYY-MM-DD), or "show my reservations". Reservation requests wait for admin approval before being saved.
 
 To run only the chatbot without admin approval, the API must still be reachable if you use reservations (or configure accordingly); see [docs/DESIGN_HUMAN_IN_THE_LOOP.md](docs/DESIGN_HUMAN_IN_THE_LOOP.md).
@@ -99,7 +99,7 @@ Technical docs are in **`docs/`**:
 - **[docs/CODE_STRUCTURE.md](docs/CODE_STRUCTURE.md)** — Project layout and modules
 - **[docs/TESTING_GUARDRAILS.md](docs/TESTING_GUARDRAILS.md)** — Testing guardrails
 - **[docs/EVALUATION.md](docs/EVALUATION.md)** — RAG evaluation (Recall@K, Precision@K, latency)
-- **[docs/MCP_FILESYSTEM_SETUP.md](docs/MCP_FILESYSTEM_SETUP.md)** — Using the open-source MCP filesystem server for logging approve/reject to CSV
+- **[docs/MCP_FILESYSTEM_SETUP.md](docs/MCP_FILESYSTEM_SETUP.md)** — Using the open-source MCP filesystem server for logging approvals to CSV
 
 ## Requirements
 
