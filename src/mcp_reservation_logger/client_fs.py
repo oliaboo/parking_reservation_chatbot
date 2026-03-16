@@ -12,10 +12,9 @@ import io
 import queue
 import threading
 from datetime import datetime, timezone
-from pathlib import Path
+
 from mcp import ClientSession
-from mcp.client.stdio import stdio_client
-from mcp.client.stdio import StdioServerParameters
+from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from src.config import PROJECT_ROOT
 
@@ -148,9 +147,7 @@ def stop_mcp_fs_logger() -> None:
     _worker_thread = None
 
 
-def log_reservation_action_via_fs_mcp(
-    name: str, car_number: str, reservation_period: str
-) -> None:
+def log_reservation_action_via_fs_mcp(name: str, car_number: str, reservation_period: str) -> None:
     """Append one reservation log row to CSV (name, car_number, reservation_period, approval_time). Starts the MCP process on first call; reuses it after that. Raises on error."""
     _ensure_worker_started()
     _request_queue.put((name, car_number, reservation_period))

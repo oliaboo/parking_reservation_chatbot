@@ -114,9 +114,7 @@ def interpret_admin_input(
 # ---- Resolve & execute --------------------------------------------------------
 
 
-def _log_reservation_action_to_mcp(
-    name: str, car_number: str, reservation_period: str
-) -> None:
+def _log_reservation_action_to_mcp(name: str, car_number: str, reservation_period: str) -> None:
     """Append reservation log row to CSV via @modelcontextprotocol/server-filesystem (npx). Best-effort; no raise."""
     try:
         from src.mcp_reservation_logger.client_fs import log_reservation_action_via_fs_mcp

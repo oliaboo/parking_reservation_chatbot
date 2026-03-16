@@ -37,9 +37,20 @@ cp .env_example .env
 # Edit .env if you need to change model path, log level, etc.
 ```
 
+### 4. Node.js (for admin console approval logging)
+
+If you use the admin console and want approvals written to `reservations_mcp/reservations_log.csv`, install **Node.js** (which includes **npx**). The admin console uses the MCP filesystem server via `npx` to append log rows.
+
+```bash
+node -v   # e.g. v18+
+npx -v
+```
+
+See [docs/MCP_FILESYSTEM_SETUP.md](docs/MCP_FILESYSTEM_SETUP.md) for details. Without Node.js/npx, the admin console still works; only the CSV logging will be skipped (with a short message).
+
 ## Run
 
-Set **PYTHONPATH** to the project root (e.g. `export PYTHONPATH=/path/to/parking_reservation_chatbot`). For **human-in-the-loop** reservations you need the following processes and **ADMIN_API_BASE_URL** (e.g. `http://127.0.0.1:8000`) in `.env`:
+Set **PYTHONPATH** to the project root (e.g. `export PYTHONPATH=/path/to/parking_reservation_chatbot`). For **human-in-the-loop** reservations you need the following processes and **ADMIN_API_BASE_URL** (e.g. `http://127.0.0.1:8000`) in `.env` (see [docs/DESIGN_HUMAN_IN_THE_LOOP.md](docs/DESIGN_HUMAN_IN_THE_LOOP.md).):
 
 1. **Admin API** (from project root): `python run_admin_api.py` (or `make run_admin_api`)
 2. **Admin console** (in another terminal): `python run_admin_console_agent.py` (or `make run_admin`) — list pending requests, type e.g. `approve 15` or `reject 8` to approve/reject by request id. Each **approval** is appended to `reservations_mcp/reservations_log.csv` (rejections are not logged) using the **open-source MCP filesystem server** ([@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem)); requires **Node.js/npx**. See **[docs/MCP_FILESYSTEM_SETUP.md](docs/MCP_FILESYSTEM_SETUP.md)** for setup and prerequisites.
@@ -103,5 +114,6 @@ Technical docs are in **`docs/`**:
 
 ## Requirements
 
-- Python 3.10+
+- **Python 3.10+**
 - `requirements.txt`: LangChain, LangGraph, GPT4All, sentence-transformers, pytest, ruff (linting), etc. SQLite is used via the standard library (no extra package).
+- **Node.js** (and **npx**): required only for admin-console approval logging to CSV via the MCP filesystem server. Optional if you do not use that feature.

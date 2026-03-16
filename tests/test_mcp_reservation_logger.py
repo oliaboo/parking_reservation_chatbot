@@ -3,8 +3,6 @@
 import csv
 import io
 
-import pytest
-
 from src.mcp_reservation_logger.client_fs import (
     LOG_FILENAME,
     RESERVATIONS_MCP_DIR,
@@ -24,9 +22,7 @@ def test_append_line_to_content():
     from src.mcp_reservation_logger.client_fs import _append_line_to_content
 
     existing = "name,car_number,reservation_period,approval_time\n"
-    out = _append_line_to_content(
-        existing, "alice", "AB-123", "2025-03-10, 2025-03-11"
-    )
+    out = _append_line_to_content(existing, "alice", "AB-123", "2025-03-10, 2025-03-11")
     lines = out.strip().split("\n")
     assert len(lines) == 2
     assert lines[0] == "name,car_number,reservation_period,approval_time"
