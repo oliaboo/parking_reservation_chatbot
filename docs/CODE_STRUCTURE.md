@@ -10,7 +10,7 @@ This document describes the project layout and how each module is used.
 parking_reservation_chatbot/
 ├── run_chatbot_agent.py         # Chatbot entry: nickname, init, chat loop
 ├── run_admin_api.py             # Admin REST API (FastAPI, POST/GET/PATCH requests)
-├── run_admin_console_agent.py   # Admin console: list pending, LLM-interpreted approve/reject
+├── run_admin_console_agent.py   # Admin console: list pending, LLM-interpreted approve/reject; logs via filesystem MCP
 ├── data/
 │   └── parking.db         # SQLite (users, reservations, reservation_requests, prices, working_hours, availability)
 ├── rag_data/
@@ -34,7 +34,9 @@ parking_reservation_chatbot/
     │   └── ...            # FAISS over parking_info.txt
     ├── guardrails/
     │   └── ...
-    └── chatbot/
+    ├── mcp_reservation_logger/
+    │   └── client_fs.py       # Spawns @modelcontextprotocol/server-filesystem (npx), read_text_file + write_file → CSV
+└── chatbot/
         ├── chatbot.py     # LangGraph; _handle_reservation polls API, apply on approve
         ├── rag_system.py   # RAG (retrieval k=3, no conversation history in prompt)
         ├── llm_setup.py
@@ -136,6 +138,14 @@ parking_reservation_chatbot/
 
 ---
 
+## 7.1 MCP Reservation Logger: src/mcp_reservation_logger/
+
+**Role:** Admin console logs each approve/reject to `reservations_mcp/reservations_log.csv` using the **open-source** [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) (Node.js). No separate server: the console starts it once (on first log) via npx and reuses the same session until exit.
+
+- **client_fs.py:** Starts `npx -y @modelcontextprotocol/server-filesystem <reservations_mcp_dir>` once per run (on first log), connects over stdio, and reuses that session for every approve/reject: **read_text_file** then **write_file** to append one row (action, request_id, time UTC ISO). Requires Node.js/npx. See [MCP_FILESYSTEM_SETUP.md](MCP_FILESYSTEM_SETUP.md).
+
+---
+
 ## 8. Chatbot layer: src/chatbot/
 
 **Role:** Orchestrate conversation: every turn goes through handle_general_query, which uses the LLM to classify intent and then calls RAG, reservation logic, or show reservations; return one reply per turn.
@@ -179,7 +189,7 @@ parking_reservation_chatbot/
 ## 9. How components connect
 
 - **run_chatbot_agent.py** → get_db, initialize_system (VectorStore, GuardRails, LLMProvider, RAGSystem, ReservationHandler, ParkingChatbot).
-- **run_admin_console_agent.py** → admin API (GET/PATCH), LLMProvider for interpreting approve/reject commands.
+- **run_admin_console_agent.py** → admin API (GET/PATCH), LLMProvider; on each approve/reject, spawns filesystem MCP server (client_fs) to append to CSV.
 - **ParkingChatbot** → RAGSystem, ReservationHandler; ReservationHandler uses admin_api.client for create and status.
 - **RAGSystem** → VectorStore, LLMProvider, GuardRails, SQLiteDB (prices, working_hours). Retrieval k=3, no conversation history in prompt.
 - **ReservationHandler** → SQLiteDB (availability, reservations), admin_api.client (create_request, get_pending_request_details).
@@ -191,6 +201,7 @@ parking_reservation_chatbot/
 
 - **test_db.py** — SQLiteDB: user_exists, add_reservation, get_reservations, get_free_spaces, reservation_requests methods.
 - **test_admin_api.py** — API endpoints (POST/GET/PATCH).
+- **test_mcp_reservation_logger.py** — client_fs: CSV header/append helpers, module exports.
 - **test_reservation_handler.py** — ReservationState, ReservationHandler (create_request via client, apply_approved_request); admin client mocked.
 - **test_chatbot.py** — Show reservations, RAG, reservation flow with mocked admin API.
 - **test_guardrails.py** — GuardRails: block SSN, card, email, phone; allow safe query and reservation date.

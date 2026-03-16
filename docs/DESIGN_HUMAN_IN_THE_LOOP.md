@@ -68,7 +68,13 @@ Reservation requests are escalated to a human administrator. The chatbot sends a
 
 ## 6. Configuration and Run Order
 
-**ADMIN_API_BASE_URL** must be set for the chatbot to create and poll requests. Typical order: start the admin API, then the admin console, then the chatbot (all can run on one machine with default URL).
+**ADMIN_API_BASE_URL** must be set for the chatbot to create and poll requests. Typical order: start the admin API, then (optionally) the MCP reservation logger, then the admin console, then the chatbot (all can run on one machine with default URLs).
+
+### 6.1 MCP Reservation Action Logger
+
+**Purpose:** When the admin console approves or rejects a request, the action is appended to a CSV file for audit/logging using the **open-source** [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) (Node.js). No separate server process: the admin console spawns it via `npx` when needed.
+
+**Behaviour:** The console starts the filesystem MCP server **once** (on first approve/reject) via `npx -y @modelcontextprotocol/server-filesystem <reservations_mcp_dir>`, connects over stdio, and reuses that session for every subsequent approve/reject. For each action it calls **read_text_file** then **write_file** to append one row to `reservations_mcp/reservations_log.csv` (columns: **action**, **request_id**, **time** UTC ISO). The server is allowed to access **only** the `reservations_mcp/` directory. The npx process is closed when the console exits. If spawning or MCP fails, the console prints a short message and continues. **Prerequisites:** Node.js and npx. See [MCP_FILESYSTEM_SETUP.md](MCP_FILESYSTEM_SETUP.md).
 
 ---
 
@@ -88,7 +94,8 @@ User provides dates → chatbot checks availability → client POST `/requests` 
 | `src/chatbot/reservation_handler.py` | create_request after availability; apply_approved_request |
 | `src/chatbot/chatbot.py` | _handle_reservation: pending detection, polling, apply on approve |
 | `run_admin_api.py` | Run the admin API process |
-| `run_admin_console_agent.py` | Console: GET pending, LLM-interpreted input, PATCH approve/reject |
+| `run_admin_console_agent.py` | Console: GET pending, LLM-interpreted input, PATCH approve/reject; logs via filesystem MCP on each action |
 | `run_chatbot_agent.py` | Chatbot entry (requires ADMIN_API_BASE_URL for escalation) |
+| `src/mcp_reservation_logger/client_fs.py` | Spawns @modelcontextprotocol/server-filesystem (npx), read_text_file + write_file to append CSV |
 
-Tests cover the API (`tests/test_admin_api.py`) and DB behaviour for reservation requests.
+Tests cover the API (`tests/test_admin_api.py`), MCP client_fs helpers (`tests/test_mcp_reservation_logger.py`), and DB behaviour for reservation requests.

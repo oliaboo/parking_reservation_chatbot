@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # ignore unknown env vars (e.g. removed MCP_*)
 
 
 # Global settings instance
