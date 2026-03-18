@@ -12,7 +12,7 @@ import sys
 from typing import Any, Literal, Optional
 
 import requests
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import FewShotPromptTemplate, PromptTemplate
 from langchain_core.tools import tool
 from src.config import settings
 
@@ -22,7 +22,7 @@ BASE_URL = settings.admin_api_base_url
 
 ParsedActions = list[tuple[Literal["approve", "reject", "refresh", "unknown"], Optional[str]]]
 
-ADMIN_PROMPT = """You must produce output based only on the input data below.
+ADMIN_PROMPT_PREFIX = """You must produce output based only on the input data below.
 
 Input data: a single line containing one or more commands. Each command is either "approve" or "reject" followed by one or more numerical ids (e.g. 8, 10, 11). Typos and uppercase letters in the command words must be ignored (e.g. aprov, aprove, rejct = approve/reject). Multiple commands can be separated by commas.
 Do not show any thinking, reasoning, argumentation, or explanation. Reply with ONLY the output line (e.g. APPROVE 12 or APPROVE 8, APPROVE 9). No code. No markdown. No other text.
@@ -30,14 +30,26 @@ Do not show any thinking, reasoning, argumentation, or explanation. Reply with O
 Produce the output by converting each command to the format approve N or reject N. One action per command, comma-separated on one line.
 Don't include any info from the examples in output.
 
-Examples:
-in: approve 10  -> out: approve 10
-in: aprov 11    -> out: approve 11
-in: ApRove 8, 9 -> out: approve 8, approve 9
-in: rejct 12    -> out: reject 12
+Examples:"""
 
-Input: {admin_input}
+ADMIN_PROMPT_SUFFIX = """Input: {admin_input}
 Output:"""
+
+ADMIN_FEW_SHOT_EXAMPLES = [
+    {"input": "approve 10", "output": "approve 10"},
+    {"input": "aprov 11", "output": "approve 11"},
+    {"input": "ApRove 8, 9", "output": "approve 8, approve 9"},
+    {"input": "rejct 12", "output": "reject 12"},
+]
+
+_admin_example_prompt = PromptTemplate.from_template("in: {input}  -> out: {output}")
+ADMIN_FEW_SHOT_PROMPT = FewShotPromptTemplate(
+    examples=ADMIN_FEW_SHOT_EXAMPLES,
+    example_prompt=_admin_example_prompt,
+    prefix=ADMIN_PROMPT_PREFIX,
+    suffix=ADMIN_PROMPT_SUFFIX,
+    input_variables=["admin_input"],
+)
 
 # ---- API (LangChain tools) ----------------------------------------------------
 
@@ -103,9 +115,8 @@ def interpret_admin_input(
     admin_input: str,
     llm: Any,
 ) -> ParsedActions:
-    """Interpret admin input via LLM; expect one line: APPROVE 15, DISCARD 16."""
-    prompt = PromptTemplate.from_template(ADMIN_PROMPT)
-    formatted = prompt.format(admin_input=admin_input)
+    """Interpret admin input via LLM few-shot prompt; expect one line: approve 15, reject 16."""
+    formatted = ADMIN_FEW_SHOT_PROMPT.format(admin_input=admin_input)
     out = llm.invoke(formatted)
     content = out.content if hasattr(out, "content") else out
     return _parse_llm_output(str(content).strip())
@@ -114,38 +125,16 @@ def interpret_admin_input(
 # ---- Resolve & execute --------------------------------------------------------
 
 
-def _log_reservation_action_to_mcp(name: str, car_number: str, reservation_period: str) -> None:
-    """Append reservation log row to CSV via @modelcontextprotocol/server-filesystem (npx). Best-effort; no raise."""
-    try:
-        from src.mcp_reservation_logger.client_fs import log_reservation_action_via_fs_mcp
-
-        log_reservation_action_via_fs_mcp(name, car_number, reservation_period)
-    except Exception as e:
-        inner = getattr(e, "exceptions", (e,))
-        msg = inner[0] if inner else e
-        print(f"  (MCP logger unreachable: {msg})")
-
-
 def _apply_action(
     action: Literal["approve", "reject"],
     request_id: str,
-    pending: list[dict[str, Any]],
 ) -> Optional[str]:
-    """Call API for one action. Returns None on success, or error message."""
+    """Call API for one action. Returns None on success, or error message. MCP logging is done by the chatbot's record_data node after approval."""
     try:
         if action == "approve":
             approve_request.invoke({"request_id": request_id})
         else:
             reject_request.invoke({"request_id": request_id})
-        if action == "approve":
-            req = next((r for r in pending if str(r["id"]) == str(request_id)), None)
-            if req:
-                from src.db.sqlite_db import get_db
-
-                name = req.get("nickname", "")
-                car_number = get_db().get_plates_by_nickname(name) or ""
-                reservation_period = ", ".join(req.get("dates") or [])
-                _log_reservation_action_to_mcp(name, car_number, reservation_period)
         return None
     except requests.RequestException as e:
         resp = getattr(e, "response", None)
@@ -159,7 +148,7 @@ def execute_actions(pending: list[dict[str, Any]], actions: ParsedActions) -> No
     for action, raw_id in actions:
         if action not in ("approve", "reject") or not raw_id:
             continue
-        msg = _apply_action(action, raw_id, pending)
+        msg = _apply_action(action, raw_id)
         if msg:
             print(f"  {msg}")
         else:

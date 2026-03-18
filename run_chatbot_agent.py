@@ -165,6 +165,9 @@ def main():
 
             # Check for exit commands
             if user_input.lower() in ["quit", "exit", "bye"]:
+                from src.mcp_reservation_logger.client_fs import stop_mcp_fs_logger
+
+                stop_mcp_fs_logger()
                 print("\nThank you for using the parking reservation system. Goodbye!")
                 break
 
@@ -179,11 +182,19 @@ def main():
             conversation_history.append({"role": "assistant", "content": response})
 
         except KeyboardInterrupt:
+            try:
+                from src.mcp_reservation_logger.client_fs import stop_mcp_fs_logger
+
+                stop_mcp_fs_logger()
+            except Exception:
+                pass
             print("\n\nInterrupted by user. Goodbye!")
             break
         except Exception as e:
             logger.error(f"Error in chat loop: {e}")
             print(f"\nI'm sorry, I encountered an error: {str(e)}\n")
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import asyncio
 import atexit
 import csv
 import io
+import os
 import queue
 import threading
 from datetime import datetime, timezone
@@ -89,8 +90,10 @@ async def _mcp_worker_loop() -> None:
         command="npx",
         args=["-y", "@modelcontextprotocol/server-filesystem", path_arg],
     )
+    errlog = None
     try:
-        async with stdio_client(params) as (read_stream, write_stream):
+        errlog = open(os.devnull, "w")
+        async with stdio_client(params, errlog=errlog) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()
                 _session_ready.set()
@@ -111,6 +114,8 @@ async def _mcp_worker_loop() -> None:
         _result_queue.put((False, e))
     finally:
         _session_ready.set()
+        if errlog is not None:
+            errlog.close()
 
 
 def _thread_target() -> None:
@@ -141,7 +146,7 @@ def stop_mcp_fs_logger() -> None:
         return
     try:
         _request_queue.put(_SENTINEL)
-        _worker_thread.join(timeout=5)
+        _worker_thread.join(timeout=2)
     except Exception:
         pass
     _worker_thread = None
@@ -149,6 +154,8 @@ def stop_mcp_fs_logger() -> None:
 
 def log_reservation_action_via_fs_mcp(name: str, car_number: str, reservation_period: str) -> None:
     """Append one reservation log row to CSV (name, car_number, reservation_period, approval_time). Starts the MCP process on first call; reuses it after that. Raises on error."""
+    if os.environ.get("PYTEST_RUNNING") == "1":
+        return  # Skip MCP in tests: no npx subprocess, no worker thread, no atexit join
     _ensure_worker_started()
     _request_queue.put((name, car_number, reservation_period))
     ok, err = _result_queue.get(timeout=15)
@@ -156,5 +163,7 @@ def log_reservation_action_via_fs_mcp(name: str, car_number: str, reservation_pe
         raise err
 
 
-# When the process exits, close the MCP session so the npx subprocess does not linger
-atexit.register(stop_mcp_fs_logger)
+# When the process exits, close the MCP session so the npx subprocess does not linger.
+# Skip under pytest (conftest sets PYTEST_RUNNING) so test run does not block on atexit join.
+if os.environ.get("PYTEST_RUNNING") != "1":
+    atexit.register(stop_mcp_fs_logger)

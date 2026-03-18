@@ -140,7 +140,7 @@ parking_reservation_chatbot/
 
 ## 7.1 MCP Reservation Logger: src/mcp_reservation_logger/
 
-**Role:** Admin console logs each **approval** (rejections are not logged) to `reservations_mcp/reservations_log.csv` using the **open-source** [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) (Node.js). No separate server: the console starts it once (on first approval) via npx and reuses the same session until exit.
+**Role:** The **chatbot's record_data node** (after administrator approval) logs each approval to `reservations_mcp/reservations_log.csv` using the **open-source** [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) (Node.js). MCP server is started once (on first log) via npx and reuses the same session until exit.
 
 - **client_fs.py:** Starts `npx -y @modelcontextprotocol/server-filesystem <reservations_mcp_dir>` once per run (on first log), connects over stdio, and reuses that session for every approval: **read_text_file** then **write_file** to append one row (name, car_number, reservation_period, approval_time UTC ISO). Requires Node.js/npx. See [MCP_FILESYSTEM_SETUP.md](MCP_FILESYSTEM_SETUP.md).
 
@@ -148,18 +148,20 @@ parking_reservation_chatbot/
 
 ## 8. Chatbot layer: src/chatbot/
 
-**Role:** Orchestrate conversation: every turn goes through handle_general_query, which uses the LLM to classify intent and then calls RAG, reservation logic, or show reservations; return one reply per turn.
+**Role:** Orchestrate conversation and the full pipeline (user interaction → administrator approval → data recording) via LangGraph.
 
 ### chatbot.py
 
-- **ParkingChatbot:** Builds a LangGraph `StateGraph(Dict)` with a single node: **handle_general_query**. Entry → handle_general_query → END. State is `{"messages": [...]}`.
-- **handle_general_query (always runs):** If reservation in progress (waiting for date): if message looks like a date (YYYY-MM-DD or range) → `_handle_reservation(state)`; else classify intent so the user can do something else — **show_reservations** or **general** clear the reservation and run that path, **reserve** → `_handle_reservation`. When not in reservation, classify intent and route to `_handle_reservation`, `_handle_show_reservations`, or `rag_system.generate_response` accordingly.
-- **_handle_reservation:** On `(True, "pending_approval", request_id)` from handler: inform user, poll get_request_status every 2 s (max 300 s), on approve call apply_approved_request; on reject/timeout show message. Otherwise validate guardrails, start reservation or process_user_input (date/range) and return the handler message.
-- **_handle_show_reservations** (internal): `reservation_handler.get_active_reservations()` → format and return as one AI message.
-- **_looks_like_date(text):** True if input matches a single date (YYYY-MM-DD) or date range; used when in reservation so date-like input goes to `_handle_reservation` and other input is intent-classified (user can cancel, show reservations, or ask a question).
-- **chat(user_input, conversation_history):** Build state with messages, invoke graph, return last AI message content. When the turn is routed to RAG (general), the RAG is called without conversation history in the prompt (stateless per query).
+- **ParkingChatbot:** Builds a LangGraph with three nodes for the pipeline:
+  1. **user_interaction** — RAG context and chatbot: intent (reserve / show_reservations / general), collect reservation date or answer with RAG; when user submits dates and handler creates a pending request, sets `reservation_request_id` and routes to **wait_for_approval**.
+  2. **wait_for_approval** — Administrator approval (human-in-the-loop): polls `get_request_status` until approved/rejected/timeout; sets `approval_result` and routes to **record_data** only when approved.
+  3. **record_data** — Data recording after confirmation: calls `apply_approved_request` (DB), then gets (nickname, dates, plates) and calls MCP `log_reservation_action_via_fs_mcp` to append one row to the CSV.
+- **State:** `messages` (append), optional `reservation_request_id` and `approval_result` for the reservation flow.
+- **Edges:** user_interaction → (if `reservation_request_id`) wait_for_approval else END; wait_for_approval → (if approved) record_data else END; record_data → END.
+- **_looks_like_date(text):** True if input matches a single date (YYYY-MM-DD) or date range; used when in reservation to route date input to reservation logic.
+- **chat(user_input, conversation_history):** Invoke graph, return last AI message content.
 
-**Uses:** RAGSystem (classify_intent + generate_response), ReservationHandler (and thus db for reservations and show-reservations).
+**Uses:** RAGSystem, ReservationHandler, admin_api.client (get_request_status, get_pending_request_details), mcp_reservation_logger.client_fs (from record_data node).
 
 ### rag_system.py
 
@@ -189,7 +191,7 @@ parking_reservation_chatbot/
 ## 9. How components connect
 
 - **run_chatbot_agent.py** → get_db, initialize_system (VectorStore, GuardRails, LLMProvider, RAGSystem, ReservationHandler, ParkingChatbot).
-- **run_admin_console_agent.py** → admin API (GET/PATCH), LLMProvider; on each **approval**, spawns filesystem MCP server (client_fs) to append to CSV (rejections not logged).
+- **run_admin_console_agent.py** → admin API (GET/PATCH), LLMProvider; approves/rejects only (MCP logging is done by the chatbot's record_data node when it sees approval).
 - **ParkingChatbot** → RAGSystem, ReservationHandler; ReservationHandler uses admin_api.client for create and status.
 - **RAGSystem** → VectorStore, LLMProvider, GuardRails, SQLiteDB (prices, working_hours). Retrieval k=3, no conversation history in prompt.
 - **ReservationHandler** → SQLiteDB (availability, reservations), admin_api.client (create_request, get_pending_request_details).
