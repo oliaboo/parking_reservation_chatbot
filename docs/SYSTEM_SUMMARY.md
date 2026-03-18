@@ -72,10 +72,9 @@ flowchart TB
 
 **Startup (run_chatbot_agent.py)**
 
-1. Project root on `sys.path`, `chdir` to project root; `setup_logging()`.
-2. `get_db()` → SQLiteDB singleton (`data/parking.db`).
-3. Nickname loop: `input()` until `db.user_exists(nickname)`.
-4. `initialize_system(nickname)` builds once per run: VectorStore (FAISS over parking_info.txt), GuardRails, LLMProvider (GPT4All), RAGSystem(vector_store, llm, guard_rails, db), ReservationHandler(db, nickname), ParkingChatbot(rag_system, reservation_handler). Same `db` shared by RAG and ReservationHandler.
+1. Project root on `sys.path`; `get_db()` → SQLiteDB singleton (`data/parking.db`).
+2. Nickname loop: `input()` until `db.user_exists(nickname)`.
+3. `initialize_system(nickname)` builds once per run: VectorStore (FAISS over parking_info.txt), GuardRails, LLMProvider (GPT4All), RAGSystem(vector_store, llm, guard_rails, db), ReservationHandler(db, nickname), ParkingChatbot(rag_system, reservation_handler). Same `db` shared by RAG and ReservationHandler.
 
 **Per user message**
 

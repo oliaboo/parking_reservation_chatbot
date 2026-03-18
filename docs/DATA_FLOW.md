@@ -9,8 +9,7 @@ This document describes the end-to-end data flow: from application startup throu
 ```
 run_chatbot_agent.py (main)
     │
-    ├─► Set project root on sys.path, chdir to project root
-    ├─► setup_logging()
+    ├─► Set project root on sys.path
     ├─► get_db()  →  SQLiteDB (data/parking.db), singleton
     │
     ├─► Nickname loop:
@@ -154,7 +153,7 @@ Data read: vector store (from file), `prices` and `working_hours` tables. Nothin
 ## 6. Configuration and environment
 
 - **Config:** `src/config.py` — `Settings` (pydantic-settings), loads from `.env` and env vars.
-- **Paths:** Model path, DB path (default `data/parking.db`), log file, embedding model name, retrieval_k, guardrails on/off, etc.
+- **Paths:** Model path, DB path (default `data/parking.db`), embedding model name, retrieval_k, guardrails on/off, etc.
 - **run_chatbot_agent.py** does not pass DB path explicitly; `get_db()` uses default path under project root, so running from project root ensures the same DB file is used everywhere.
 
 This is the complete data flow from startup through each user message to the database and back to the user.

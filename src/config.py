@@ -73,8 +73,7 @@ class Settings(BaseSettings):
     evaluation_enabled: bool = os.getenv("EVALUATION_ENABLED", "true").lower() == "true"
     metrics_k: int = int(os.getenv("METRICS_K", "5"))
 
-    # Logging
-    log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    # Chatbot run log (steps written when launching run_chatbot_agent.py)
     log_file: str = _resolve_path(os.getenv("LOG_FILE", "logs/chatbot.log"))
 
     # Chatbot Configuration

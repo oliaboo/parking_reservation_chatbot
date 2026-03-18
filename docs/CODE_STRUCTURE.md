@@ -20,7 +20,7 @@ parking_reservation_chatbot/
 ├── requirements.txt
 ├── .env / .env_example
 ├── local_models/
-├── logs/
+├── logs/                  # Step log from run_chatbot_agent.py (see § Logging)
 ├── docs/
 ├── tests/
 └── src/
@@ -51,7 +51,6 @@ parking_reservation_chatbot/
 
 - **Path and cwd:** Adds project root to `sys.path`, `os.chdir(project_root)` so imports and paths like `data/parking.db` and `local_models/` work.
 - **Imports:** All `src.*` modules used by the app (config, vector_db, guardrails, chatbot, db).
-- **Logging:** Configures stdout and optional log file (loguru or stdlib).
 - **main():**
   1. `get_db()` — ensure SQLite DB exists (singleton).
   2. Nickname loop: `input()` until `db.user_exists(nickname)`.
@@ -60,13 +59,22 @@ parking_reservation_chatbot/
 
 **Uses:** config.settings, get_db, VectorStore, GuardRails, LLMProvider, RAGSystem, ReservationHandler, ParkingChatbot.
 
+### Logging (run_chatbot_agent.py)
+
+When you run the chatbot, a **step logger** writes execution steps to a file under the project root so you can see what ran without watching the console.
+
+- **Log file:** Default `logs/chatbot.log` (path from `settings.log_file`, overridable with env `LOG_FILE`).
+- **Format:** One line per event: `YYYY-MM-DD HH:MM:SS | LEVEL | message`.
+- **What is logged:** Startup (chatbot name), waiting for nickname, nickname accepted, each init step (vector store, guard rails, LLM loaded, RAG system, reservation handler, chatbot), “System ready”, “Session started for &lt;nickname&gt;”, and session end (“Session ended (user quit)” or “Session ended (interrupted)”). Errors (e.g. failed vector store or LLM load) are written at ERROR level.
+- **Setup:** `_setup_step_logger()` creates the `logs/` directory if needed, attaches a single `FileHandler` to the logger `chatbot.run`, and disables propagation so only this file receives the messages. No console output is sent to the log file.
+
 ---
 
 ## 3. Configuration: src/config.py
 
 **Role:** Central settings from environment and `.env`.
 
-- **Settings:** Model path, temperature, max tokens, `use_mock_db` (FAISS backend), embedding model name, guardrails enabled/threshold, log level/file, chatbot name, retrieval_k, etc.
+- **Settings:** Model path, temperature, max tokens, `use_mock_db` (FAISS backend), embedding model name, guardrails enabled/threshold, **log_file** (default `logs/chatbot.log` for step logging), chatbot name, retrieval_k, etc.
 - **Usage:** Imported as `settings` everywhere (run_chatbot_agent.py, and inside components that need paths or flags). No direct DB or chat logic.
 
 ---

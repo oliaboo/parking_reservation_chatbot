@@ -16,7 +16,7 @@ Technical documentation: data flow, code structure, human-in-the-loop design, te
 
 ## Quick overview
 
-- **Chatbot:** `run_chatbot_agent.py` — nickname, then chat (RAG for info, reserve, show reservations). Reservations are sent to the admin API and wait for approval.
+- **Chatbot:** `run_chatbot_agent.py` — nickname, then chat (RAG for info, reserve, show reservations). Reservations are sent to the admin API and wait for approval. A **step logger** writes execution steps (startup, init, session start/end) to `logs/chatbot.log`; see [CODE_STRUCTURE.md § Logging](CODE_STRUCTURE.md#logging-run_chatbot_agentpy).
 - **Admin API:** `run_admin_api.py` — REST API for creating and updating reservation requests (POST/GET/PATCH).
 - **Admin console:** `run_admin_console_agent.py` — lists pending requests, interprets lines like `approve 15` / `reject 8` via an LLM, PATCHes the API (no MCP; logging is in the chatbot).
 - **MCP logging:** The **chatbot** (LangGraph **record_data** node) uses the **open-source** [@modelcontextprotocol/server-filesystem](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) (Node/npx) to append each **approval** to `reservations_mcp/reservations_log.csv` when it sees approval. See [MCP_FILESYSTEM_SETUP.md](MCP_FILESYSTEM_SETUP.md).
