@@ -15,13 +15,16 @@ except ImportError:
 class SensitiveDataFilter:
     """Detects and redacts SSN, card, email, phone; optional NER for names/orgs."""
 
+    # SSN: allow ASCII hyphen, en-dash, em-dash, and optional spaces (LLMs may use Unicode)
+    _SSN_PATTERN = r"\b\d{3}\s*[\-–—]\s*\d{2}\s*[\-–—]\s*\d{4}\b"
+
     def __init__(self, threshold: float = 0.7) -> None:
         self.threshold = threshold
         self.sensitive_patterns = [
-            r"\b\d{3}-\d{2}-\d{4}\b",
+            SensitiveDataFilter._SSN_PATTERN,
             r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
             r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-            r"\b\d{3}-\d{3}-\d{4}\b",
+            r"\b\d{3}[\s\-–—]?\d{3}[\s\-–—]?\d{4}\b",  # US phone; same dash/space flexibility
         ]
         self.ner_pipeline = None
         if TRANSFORMERS_AVAILABLE and pipeline is not None:
@@ -34,6 +37,9 @@ class SensitiveDataFilter:
                 )
             except Exception:
                 pass
+
+    # When allow_reservation_data=True we only block SSN and card (first two patterns).
+    _RESERVATION_BLOCKED_PATTERN_COUNT = 2
 
     def contains_sensitive_data(self, text: str) -> bool:
         """Return True if text matches sensitive patterns or NER entities above threshold."""
@@ -49,6 +55,14 @@ class SensitiveDataFilter:
                             return True
             except Exception:
                 pass
+        return False
+
+    def contains_sensitive_data_reservation_query(self, text: str) -> bool:
+        """True if text contains SSN or card only (for reservation flow; no email/phone)."""
+        patterns = self.sensitive_patterns[: self._RESERVATION_BLOCKED_PATTERN_COUNT]
+        for pattern in patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                return True
         return False
 
     def filter_sensitive_data(self, text: str, replacement: str = "[REDACTED]") -> str:

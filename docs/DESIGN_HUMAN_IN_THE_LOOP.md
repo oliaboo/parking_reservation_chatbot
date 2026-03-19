@@ -98,4 +98,4 @@ User provides dates → chatbot checks availability → client POST `/requests` 
 | `run_chatbot_agent.py` | Chatbot entry (requires ADMIN_API_BASE_URL for escalation) |
 | `src/mcp_reservation_logger/client_fs.py` | Spawns @modelcontextprotocol/server-filesystem (npx), read_text_file + write_file to append CSV |
 
-Tests cover the API (`tests/test_admin_api.py`), MCP client_fs helpers (`tests/test_mcp_reservation_logger.py`), and DB behaviour for reservation requests.
+Tests cover the API (`tests/test_admin_api.py`), MCP client_fs helpers (`tests/test_mcp_reservation_logger.py`), and DB behaviour for reservation requests. System tests (load + orchestration integration) live in `tests_system/` and are run with `make tests-system` (not by CI or `make tests`).

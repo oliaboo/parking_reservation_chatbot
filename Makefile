@@ -4,10 +4,14 @@
 PYTHONPATH := $(CURDIR)
 export PYTHONPATH
 
-.PHONY: tests lint evaluation evaluation_report_cosine evaluation_report_l2 run_chatbot run_admin run_admin_api
+.PHONY: tests tests-system lint evaluation evaluation_report_cosine evaluation_report_l2 run_chatbot run_admin run_admin_api
 
 tests:
 	pytest tests/ -v
+
+# System tests (load + integration): not run by CI or "make tests"
+tests-system:
+	pytest tests_system/ -v
 
 lint:
 	ruff check --fix .

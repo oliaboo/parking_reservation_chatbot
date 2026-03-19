@@ -214,7 +214,9 @@ When you run the chatbot, a **step logger** writes execution steps to a file und
 - **test_mcp_reservation_logger.py** — client_fs: CSV header/append helpers, module exports.
 - **test_reservation_handler.py** — ReservationState, ReservationHandler (create_request via client, apply_approved_request); admin client mocked.
 - **test_chatbot.py** — Show reservations, RAG, reservation flow with mocked admin API.
+- **test_rag_system.py** — RAGSystem unit tests: generate_response uses retrieved and dynamic context in the prompt, no-context fallback message; classify_intent returns reserve / show_reservations / general (including typo and “reserve” fallbacks).
 - **test_guardrails.py** — GuardRails: block SSN, card, email, phone; allow safe query and reservation date.
+- **tests_system/** — System tests (load + integration). Not run by `make tests` or CI. Run with `make tests-system` or `pytest tests_system/ -v`. Contains load tests (chatbot, admin confirmation, MCP recording) and integration tests for orchestration (approved, rejected, general no-escalation).
 
 Tests use temp SQLite files and do not start the full app or load the local LLM.
 

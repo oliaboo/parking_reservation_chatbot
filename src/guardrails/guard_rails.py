@@ -19,18 +19,11 @@ class GuardRails:
         if not self.enabled:
             return True, None
         if allow_reservation_data:
-            import re
-
-            sensitive_patterns = [
-                r"\b\d{3}-\d{2}-\d{4}\b",
-                r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
-            ]
-            for pattern in sensitive_patterns:
-                if re.search(pattern, query, re.IGNORECASE):
-                    return (
-                        False,
-                        "Query contains potentially sensitive information. Please rephrase.",
-                    )
+            if self.filter and self.filter.contains_sensitive_data_reservation_query(query):
+                return (
+                    False,
+                    "Query contains potentially sensitive information. Please rephrase.",
+                )
             return True, None
         if self.filter and self.filter.contains_sensitive_data(query):
             return False, "Query contains potentially sensitive information. Please rephrase."
